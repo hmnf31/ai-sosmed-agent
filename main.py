@@ -6,7 +6,8 @@ from utils.scraper import get_google_trends
 from utils.ai_generator import generate_caption
 from utils.instagram import publish_to_instagram
 from utils.image_maker import render_trend_image
-from utils.notifier import send_telegram_notification, send_telegram_photo
+from utils.video_maker import render_trend_video
+from utils.notifier import send_telegram_notification, send_telegram_photo, send_telegram_video
 
 # Load variabel lingkungan untuk pengembangan lokal
 load_dotenv()
@@ -14,6 +15,10 @@ load_dotenv()
 
 def dry_run_enabled():
     return os.getenv("DRY_RUN", "false").strip().lower() in ("1", "true", "yes", "on")
+
+
+def preview_format():
+    return os.getenv("PREVIEW_FORMAT", "video").strip().lower()
 
 
 def run_agent():
@@ -29,18 +34,22 @@ def run_agent():
         caption = generate_caption(trends)
 
         if dry_run_enabled():
-            # 3. Render kartu tren + kirim ke Telegram untuk diposting manual
-            image_path = render_trend_image(trends)
-            photo_ok = send_telegram_photo(image_path, caption)
+            # 3. Render konten + kirim ke Telegram untuk diposting manual
+            if preview_format() == "image":
+                media_path = render_trend_image(trends)
+                media_ok = send_telegram_photo(media_path, caption)
+            else:
+                media_path = render_trend_video(trends)
+                media_ok = send_telegram_video(media_path, caption)
 
             message = (
                 f"🆗 *Preview AI Agent (siap posting manual)*\n\n"
                 f"*Topik Tren:* {', '.join(trends)}\n"
-                f"*Gambar:* `{image_path}`\n"
-                f"*Foto terkirim ke Telegram:* {'ya' if photo_ok else 'tidak'}"
+                f"*Media:* `{media_path}`\n"
+                f"*Terkirim ke Telegram:* {'ya' if media_ok else 'tidak'}"
             )
             send_telegram_notification(message)
-            print(f"\n--- CAPTION (siap disalin ke Instagram) ---\n{caption}\n")
+            print(f"\n--- CAPTION (siap disalin ke media sosial) ---\n{caption}\n")
         else:
             # 3. Tentukan URL Gambar (Gambar sampel high quality atau image generator)
             sample_image_url = "https://picsum.photos/1080/1080"

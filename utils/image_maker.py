@@ -1,10 +1,12 @@
-import os
+﻿import os
 from datetime import datetime, timedelta, timezone
 
 from PIL import Image, ImageDraw, ImageFont
 
 WIDTH = 1080
 HEIGHT = 1080
+VIDEO_WIDTH = 1080
+VIDEO_HEIGHT = 1920
 WIB = timezone(timedelta(hours=7))
 OUTPUT_DIR = "output"
 
@@ -105,3 +107,101 @@ def render_trend_image(trends, output_path=None, footer="AI Sosmed Agent"):
     image.save(output_path, "PNG")
     print(f"[IMAGE] Kartu tren dibuat: {output_path}")
     return output_path
+
+
+def _gradient_background(width, height):
+    image = Image.new("RGB", (width, height))
+    draw = ImageDraw.Draw(image)
+    top, bottom = (16, 23, 61), (92, 44, 147)
+    for y in range(height):
+        ratio = y / (height - 1)
+        color = tuple(int(top[i] + (bottom[i] - top[i]) * ratio) for i in range(3))
+        draw.line([(0, y), (width, y)], fill=color)
+    return image, draw
+
+
+def _save_frame(image, draw, text_blocks, path, width, height, margin=96):
+    """text_blocks: list of (font_kind, size, text, fill, space_before)."""
+    y = margin
+    for kind, size, text, fill, space_before in text_blocks:
+        if not text:
+            continue
+        y += space_before
+        font = _load_font(kind, size)
+        lines = _wrap(draw, text, font, width - 2 * margin)
+        y = _draw_paragraph(draw, lines, font, margin, y, fill, 1.3)
+    image.save(path, "PNG")
+    return path
+
+
+def render_video_frames(trends, footer="AI Sosmed Agent", output_dir=None):
+    """Merender 3 frame vertikal 1080x1920 sebagai bahan video TikTok/Reels."""
+    trends = list(trends) or ["Tren Terkini"]
+    headline = trends[0]
+    others = [t for t in trends[1:] if t]
+
+    output_dir = output_dir or OUTPUT_DIR
+    os.makedirs(output_dir, exist_ok=True)
+    stamp = datetime.now(WIB).strftime("%Y%m%d-%H%M%S")
+
+    accent = (255, 196, 84)
+    white = (245, 247, 255)
+    muted = (188, 193, 220)
+
+    paths = []
+
+    image, draw = _gradient_background(VIDEO_WIDTH, VIDEO_HEIGHT)
+    draw.rounded_rectangle([96, 220, 192, 234], radius=7, fill=accent)
+    paths.append(
+        _save_frame(
+            image,
+            draw,
+            [
+                ("bold", 36, "TREN HARI INI", accent, 0),
+                ("bold", 108, headline.upper(), white, 90),
+                ("regular", 46, ", ".join(others) if others else "Ringkasan topik pilihan", muted, 70),
+                ("regular", 42, datetime.now(WIB).strftime("%d %B %Y, %H:%M WIB"), white, 0),
+            ],
+            os.path.join(output_dir, f"frame-1-{stamp}.png"),
+            VIDEO_WIDTH,
+            VIDEO_HEIGHT,
+        )
+    )
+
+    image, draw = _gradient_background(VIDEO_WIDTH, VIDEO_HEIGHT)
+    points = [f"{i + 1}. {t.capitalize()}" for i, t in enumerate(others[:3])]
+    paths.append(
+        _save_frame(
+            image,
+            draw,
+            [
+                ("bold", 36, "JUGA TRENDING", accent, 0),
+                ("regular", 62, "\n".join(points) if points else "Belum ada tren lain hari ini", white, 80),
+                ("regular", 44, "Baca caption lengkap di Telegram untuk konteks tiap topik.", muted, 80),
+                ("bold", 36, footer, accent, 0),
+            ],
+            os.path.join(output_dir, f"frame-2-{stamp}.png"),
+            VIDEO_WIDTH,
+            VIDEO_HEIGHT,
+        )
+    )
+
+    image, draw = _gradient_background(VIDEO_WIDTH, VIDEO_HEIGHT)
+    paths.append(
+        _save_frame(
+            image,
+            draw,
+            [
+                ("bold", 36, "GILIRANMU", accent, 0),
+                ("bold", 92, "KOMENTARI\nPENDAPATMU", white, 120),
+                ("regular", 48, "Pilih topik yang paling menarik dan tulis alasannya di komentar.", muted, 80),
+                ("bold", 44, "#" + footer.replace(" ", ""), accent, 140),
+            ],
+            os.path.join(output_dir, f"frame-3-{stamp}.png"),
+            VIDEO_WIDTH,
+            VIDEO_HEIGHT,
+        )
+    )
+
+    print(f"[IMAGE] {len(paths)} frame video dibuat di {output_dir}")
+    return paths
