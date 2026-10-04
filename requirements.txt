@@ -1,0 +1,14 @@
+# Web Automation & Scraping
+# playwright 1.42.0 mengunci greenlet==3.0.3 (tanpa wheel untuk Python 3.13+),
+# jadi versi ini dinaikkan agar bisa diinstal di Python modern.
+playwright==1.63.0
+
+# HTTP Requests & API Client
+requests==2.31.0
+
+# Pengolahan Gambar (Untuk membuat/memanipulasi template visual)
+# Pillow 10.2.0 hanya punya wheel sampai Python 3.12, dinaikkan ke 12.x.
+Pillow==12.3.0
+
+# Utilitas Environment
+python-dotenv==1.0.1
