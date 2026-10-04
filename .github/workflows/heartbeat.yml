@@ -25,6 +25,9 @@ jobs:
           pip install -r requirements.txt
           playwright install chromium --with-deps
 
+      - name: Pastikan ffmpeg tersedia
+        run: ffmpeg -version || (sudo apt-get update && sudo apt-get install -y ffmpeg)
+
       - name: Eksekusi AI Agent
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
@@ -32,7 +35,8 @@ jobs:
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          # 'true' = kirim kartu tren + caption ke Telegram (tanpa Instagram Graph API).
+          # 'true' = kirim media ke Telegram (tanpa Instagram Graph API).
           # Ubah ke 'false' hanya setelah IG_USER_ID dan IG_ACCESS_TOKEN terisi valid.
           DRY_RUN: 'true'
+          PREVIEW_FORMAT: 'video'
         run: python main.py
