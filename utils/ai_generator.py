@@ -1,6 +1,21 @@
 import os
 import requests
 
+API_URL = "https://openrouter.ai/api/v1/chat/completions"
+DEFAULT_MODELS = [
+    "nvidia/nemotron-3-ultra-550b-a55b:free",
+    "dots-studio/dots-3-note-preview:free",
+    "qwen/qwen3.8-27b:free",
+]
+TIMEOUT = 120
+
+
+def _candidate_models():
+    preferred = os.getenv("OPENROUTER_MODEL")
+    models = [preferred] if preferred else []
+    models += [m for m in DEFAULT_MODELS if m not in models]
+    return models
+
 
 def generate_caption(trends):
     """Mengirim tren ke OpenRouter API untuk dibuatkan caption Instagram."""
@@ -10,13 +25,14 @@ def generate_caption(trends):
 
     prompt = f"""
     Kamu adalah seorang Social Media Manager profesional.
-    Berikut adalah tren topik hari ini: {', '.join(trends)}.
+    Berikut adalah tren topik hari ini: {", ".join(trends)}.
 
     Tugasmu:
     1. Buatkan 1 caption Instagram yang menarik, edukatif, dan interaktif sesuai tren tersebut.
     2. Sertakan call-to-action (CTA) ramah di akhir kalimat.
     3. Tambahkan 5-8 hashtag yang relevan di bagian paling bawah.
     4. Gunakan bahasa Indonesia yang santai dan profesional.
+    5. Jawab HANYA dengan caption final, tanpa penjelasan atau proses berpikir.
     """
 
     headers = {
@@ -24,21 +40,32 @@ def generate_caption(trends):
         "Content-Type": "application/json",
     }
 
-    payload = {
-        "model": "meta-llama/llama-3-8b-instruct:free",
-        "messages": [{"role": "user", "content": prompt}],
-    }
+    errors = []
+    for model in _candidate_models():
+        payload = {
+            "model": model,
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": 800,
+        }
 
-    print("[AI] Mengirim permintaan ke OpenRouter...")
-    response = requests.post(
-        "https://openrouter.ai/api/v1/chat/completions",
-        headers=headers,
-        json=payload,
-    )
+        print(f"[AI] Mengirim permintaan ke OpenRouter (model: {model})...")
+        try:
+            response = requests.post(API_URL, headers=headers, json=payload, timeout=TIMEOUT)
+        except requests.RequestException as e:
+            errors.append(f"{model}: koneksi gagal ({e})")
+            continue
 
-    if response.status_code == 200:
-        caption = response.json()["choices"][0]["message"]["content"]
-        print("[AI] Caption berhasil dibuat.")
+        if response.status_code != 200:
+            errors.append(f"{model}: HTTP {response.status_code} {response.text[:200]}")
+            continue
+
+        message = response.json().get("choices", [{}])[0].get("message", {})
+        caption = (message.get("content") or "").strip()
+        if not caption:
+            errors.append(f"{model}: respons kosong")
+            continue
+
+        print(f"[AI] Caption berhasil dibuat dengan model {model}.")
         return caption
-    else:
-        raise Exception(f"Gagal memanggil OpenRouter API: {response.text}")
+
+    raise Exception("Gagal memanggil OpenRouter API pada semua model. " + " | ".join(errors))
