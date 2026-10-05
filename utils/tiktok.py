@@ -20,10 +20,32 @@ STATUS_URL = f"{API_BASE}/post/publish/status/fetch/"
 TIMEOUT = 60
 
 PRIVACY_LEVELS = ("PUBLIC_TO_EVERYONE", "MUTUAL_FOLLOW_FRIENDS", "FOLLOWER_OF_CREATOR", "SELF_ONLY")
+POST_MODES = ("DIRECT_POST", "MEDIA_UPLOAD")
 
 MIN_CHUNK_BYTES = 5 * 1024 * 1024
 MAX_CHUNK_BYTES = 64 * 1024 * 1024
 MAX_CHUNKS = 1000
+
+
+ERROR_HINTS = {
+    "unaudited_client_can_only_post_to_private_accounts": (
+        "Aplikasi belum lolos audit TikTok, jadi init unggah ditolak Apa pun privacy_level. "
+        "Ajukan audit di developer.tiktok.com > Manage Apps > Audit, atau pakai draft lewat "
+        "Tiktok UI sampai audit selesai."
+    ),
+    "scope_not_authorized": (
+        "Scope akun ini belum memberi izin posting. Jalankan ulang scripts/tiktok_oauth.py "
+        "setelah memberi izin video.publish atau video.upload."
+    ),
+    "spam_risk_too_many_posts": "Kuota harian posting API untuk akun ini sudah habis.",
+    "spam_risk_user_banned_from_posting": "Akun TikTok dilarang melakukan posting.",
+    "rate_limit_exceeded": "Terlalu banyak permintaan API. Tunggu sebentar sebelum mencoba lagi.",
+    "invalid_publish_id": "publish_id tidak dikenal TikTok.",
+    "url_ownership_unverified": (
+        "PULL_FROM_URL butuh verifikasi kepemilikan domain di developer.tiktok.com. "
+        "Gunakan source=FILE_UPLOAD yang tidak butuh verifikasi."
+    ),
+}
 
 
 def _describe(response):
@@ -32,12 +54,15 @@ def _describe(response):
     error = body.get("error") if isinstance(body, dict) else None
     if isinstance(error, dict):
         parts = [f"HTTP {response.status_code}"]
-        if error.get("code") and error["code"] != "ok":
-            parts.append(str(error["code"]))
+        code = error.get("code")
+        if code and code != "ok":
+            parts.append(str(code))
         if error.get("message"):
             parts.append(str(error["message"]))
         if error.get("log_id"):
             parts.append(f"log_id {error['log_id']}")
+        if code in ERROR_HINTS:
+            parts.append(ERROR_HINTS[code])
         return " | ".join(parts)
     if body:
         return f"HTTP {response.status_code}: {body}"
@@ -140,6 +165,23 @@ def get_access_token():
     return tokens["access_token"]
 
 
+def granted_scopes():
+    """Scope yang benar-benar diberikan user, dibaca dari respons refresh token."""
+    return (refresh_access_token().get("scope") or "").strip()
+
+
+def require_scope(needed):
+    """Memicat TikTokError bila scope yang dibutuhkan belum diberikan user."""
+    have = {s for s in granted_scopes().split(",") if s}
+    missing = [s for s in needed.split(",") if s and s not in have]
+    if missing:
+        raise TikTokError(
+            f"scope belum diberikan: {', '.join(missing)} (sekarang: {', '.join(sorted(have)) or 'tidak ada'}). "
+            "Jalankan ulang scripts/tiktok_oauth.py."
+        )
+    return True
+
+
 def get_user_info(access_token=None):
     access_token = access_token or get_access_token()
     response = requests.get(
@@ -240,12 +282,37 @@ def _fetch_status(publish_id, access_token):
     return data
 
 
-def publish_video(video_path, caption, access_token=None, privacy_level=None, wait=True, poll_seconds=90):
-    """Mengunggah video ke akun TikTok dan mengembalikan dict hasil publikasi."""
+def publish_video(video_path, caption, access_token=None, privacy_level=None, wait=True, poll_seconds=90, post_mode=None):
+    """Mengunggah video ke akun TikTok dan mengembalikan dict hasil publikasi.
+
+    post_mode DIRECT_POST = langsung tayang di profil (butuh scope video.publish).
+    post_mode MEDIA_UPLOAD = masuk draft, kreator menyelesaikan posting di aplikasi (butuh video.upload).
+    """
     access_token = access_token or get_access_token()
-    privacy_level = privacy_level or os.getenv("TIKTOK_PRIVACY_LEVEL") or "PUBLIC_TO_EVERYONE"
+    privacy_level = privacy_level or os.getenv("TIKTOK_PRIVACY_LEVEL") or "SELF_ONLY"
     if privacy_level not in PRIVACY_LEVELS:
         raise TikTokError(f"TIKTOK_PRIVACY_LEVEL tidak valid: {privacy_level}")
+
+    post_mode = post_mode or os.getenv("TIKTOK_POST_MODE") or "DIRECT_POST"
+    if post_mode not in POST_MODES:
+        raise TikTokError(f"TIKTOK_POST_MODE tidak valid: {post_mode}")
+
+    if post_mode == "DIRECT_POST":
+        require_scope("video.publish")
+    else:
+        post_mode = "MEDIA_UPLOAD"
+        require_scope("video.upload")
+
+    post_info = {
+        "title": (caption or "")[:2200],
+        "disable_duet": False,
+        "disable_comment": False,
+        "disable_stitch": False,
+    }
+    if post_mode == "DIRECT_POST":
+        post_info["privacy_level"] = privacy_level
+    else:
+        post_mode = "MEDIA_UPLOAD"
 
     size = _video_size(video_path)
     chunk_size = _chunk_size(size)
@@ -258,13 +325,7 @@ def publish_video(video_path, caption, access_token=None, privacy_level=None, wa
             "Content-Type": "application/json",
         },
         json={
-            "post_info": {
-                "title": (caption or "")[:2200],
-                "privacy_level": privacy_level,
-                "disable_duet": False,
-                "disable_comment": False,
-                "disable_stitch": False,
-            },
+            "post_info": post_info,
             "source_info": {
                 "source": "FILE_UPLOAD",
                 "video_size": size,
@@ -273,6 +334,7 @@ def publish_video(video_path, caption, access_token=None, privacy_level=None, wa
                 "video_width": 1080,
                 "video_height": 1920,
             },
+            "post_mode": post_mode,
         },
         timeout=TIMEOUT,
     )
