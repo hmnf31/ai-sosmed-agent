@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kebijakan Privasi - Tren Esports ID</title>
+<meta name="description" content="Kebijakan privasi aplikasi Tren Esports ID untuk upload konten video otomatis ke TikTok.">
+<style>
+  :root { --bg:#101737; --card:#182250; --text:#f5f7ff; --muted:#bcc1dc; --accent:#ffc454; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:Segoe UI,Roboto,Arial,sans-serif; background:var(--bg); color:var(--text); line-height:1.7; }
+  .wrap { max-width:760px; margin:0 auto; padding:48px 20px 80px; }
+  h1 { font-size:1.9rem; margin:0 0 8px; }
+  h2 { font-size:1.15rem; margin:32px 0 8px; color:var(--accent); }
+  .meta { color:var(--muted); font-size:.95rem; margin-bottom:28px; }
+  .card { background:var(--card); border-radius:14px; padding:24px 26px; }
+  ul { padding-left:20px; }
+  a { color:var(--accent); }
+  code { background:#0d1430; padding:2px 6px; border-radius:6px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Kebijakan Privasi</h1>
+  <p class="meta">Aplikasi: <strong>Tren Esports ID</strong> &middot; Berlaku sejak 5 Oktober 2026</p>
+
+  <div class="card">
+    <h2>1. Ringkasan</h2>
+    <p>
+      Tren Esports ID adalah aplikasi otomatisasi yang membuat konten video singkat bertema Mobile Legends:
+      Bang Bang (MLBB) lalu mengunggahnya ke satu akun TikTok milik pemilik aplikasi. Aplikasi ini
+      <strong>tidak mengumpulkan, menyimpan, atau menjual data pribadi pengguna</strong>.
+    </p>
+
+    <h2>2. Data yang Dipakai Aplikasi</h2>
+    <p>Aplikasi hanya memakai data berikut, semuanya milik pemilik aplikasi:</p>
+    <ul>
+      <li>Kredensial API TikTok (Client Key, Client Secret, refresh token) yang diberikan langsung oleh pemilik aplikasi melalui file <code>.env</code> di komputer lokal dan GitHub Secrets.</li>
+      <li>Konten publik dari kanal YouTube esports untuk menentukan topik yang sedang ramai.</li>
+      <li>Judul tren yang menjadi bahan pembentuk caption.</li>
+    </ul>
+
+    <h2>3. Penggunaan Cookie dan Pelacakan</h2>
+    <p>Tidak ada cookie iklan, tidak ada pelacak pihak ketiga, dan tidak ada analitik pengguna. Halaman ini hanya dokumen statis.</p>
+
+    <h2>4. Penyimpanan dan Keamanan Token</h2>
+    <p>
+      Token API disimpan pada file <code>.env</code> di komputer pemilik aplikasi (tidak masuk ke repository)
+      dan pada <em>GitHub Actions Secrets</em> di server GitHub. Repository kode bersifat publik namun
+      tidak memuat kredensial apa pun. Token dapat dicabut kapan saja melalui pengaturan developer TikTok.
+    </p>
+
+    <h2>5. Konten yang Dikirim</h2>
+    <p>
+      Semua video dan caption dibuat otomatis dari informasi publik. Video tidak memuat musik berhak cipta
+      yang diambil dari sumber lain, dan tidak meniru materi berhak cipta milik pihak ketiga. Penulis
+      bertanggung jawab penuh atas konten yang dikirim dari akun miliknya.
+    </p>
+
+    <h2>6. Kontak</h2>
+    <p>Pertanyaan atau permintaan penghapusan data dapat dikirim ke <a href="mailto:EMAIL_ANDA@example.com">EMAIL_ANDA@example.com</a>.</p>
+
+    <h2>7. Perubahan Kebijakan</h2>
+    <p>Kebijakan ini dapat diperbarui; tanggal berlaku di atas selalu mencerminkan versi terbaru.</p>
+  </div>
+</div>
+</body>
+</html>

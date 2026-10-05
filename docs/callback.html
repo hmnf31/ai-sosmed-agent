@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Callback OAuth TikTok</title>
+<style>
+  :root { --bg:#101737; --card:#182250; --text:#f5f7ff; --muted:#bcc1dc; --accent:#ffc454; --line:#2c3a72; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:Segoe UI,Roboto,Arial,sans-serif; background:var(--bg); color:var(--text); padding:48px 20px; }
+  .wrap { max-width:640px; margin:0 auto; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:26px; }
+  h1 { font-size:1.5rem; margin:0 0 6px; }
+  p { color:var(--muted); }
+  .field { margin:18px 0; }
+  label { display:block; font-size:.85rem; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin-bottom:6px; }
+  input { width:100%; padding:12px 14px; border-radius:10px; border:1px solid var(--line);
+          background:#0d1430; color:var(--text); font-family:Consolas,monospace; font-size:.95rem; }
+  button { margin-top:10px; padding:11px 18px; border:0; border-radius:10px; background:var(--accent);
+           color:#1a1330; font-weight:600; cursor:pointer; }
+  .empty { border:1px dashed var(--line); border-radius:12px; padding:22px; }
+  code { background:#0d1430; padding:2px 6px; border-radius:6px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <h1>Callback OAuth TikTok</h1>
+    <p>Halaman ini hanya menangkap parameter <code>code</code> dari TikTok agar bisa Anda salin ke skrip <code>scripts/tiktok_oauth.py</code>.</p>
+
+    <div id="empty" class="empty">Belum ada parameter <code>code</code> di alamat halaman ini.</div>
+
+    <div id="result" style="display:none">
+      <div class="field">
+        <label>Authorization code</label>
+        <input id="code" readonly>
+        <button onclick="copyCode()">Salin code</button>
+      </div>
+      <div class="field">
+        <label>state</label>
+        <input id="state" readonly>
+      </div>
+      <div class="field" id="errBox" style="display:none">
+        <label>Error dari TikTok</label>
+        <input id="err" readonly>
+      </div>
+      <p>Tempelkan code di atas ke terminal saat menjalankan <code>python scripts\tiktok_oauth.py</code>, lalu simpan refresh token ke file <code>.env</code>.</p>
+    </div>
+  </div>
+</div>
+<script>
+  var params = new URLSearchParams(window.location.search);
+  var code = params.get('code') || params.get('authorization_code');
+  if (code) {
+    document.getElementById('empty').style.display = 'none';
+    document.getElementById('result').style.display = 'block';
+    document.getElementById('code').value = code;
+    document.getElementById('state').value = params.get('state') || '';
+  }
+  var err = params.get('error');
+  if (err) {
+    document.getElementById('errBox').style.display = 'block';
+    document.getElementById('err').value = err + ' - ' + (params.get('error_description') || '');
+  }
+  function copyCode() {
+    var field = document.getElementById('code');
+    field.select();
+    document.execCommand('copy');
+    field.setSelectionRange(0, 99999);
+  }
+</script>
+</body>
+</html>
