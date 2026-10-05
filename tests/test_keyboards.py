@@ -13,8 +13,19 @@ def test_home_has_one_button_per_account():
 def test_account_menu_has_action_rows():
     rows = keyboards.account_markup("mlbb")["inline_keyboard"]
     assert len(rows) >= 4
-    assert rows[-1][0]["text"] == "🕘 Riwayat"
-    assert rows[-1][1]["callback_data"] == "menu:back"
+    tombol = [b["callback_data"] for row in rows for b in row]
+    assert "menu:history:mlbb" in tombol
+    assert "menu:preview:mlbb" in tombol
+    assert "menu:style:mlbb" in tombol
+    assert rows[-1][-1]["callback_data"] == "menu:back"
+
+
+def test_preview_markup_punya_tiga_format():
+    rows = keyboards.preview_markup("chess")["inline_keyboard"]
+    data = [b["callback_data"] for b in rows[0]]
+    assert data == ["menu:preview:chess:image", "menu:preview:chess:video",
+                    "menu:preview:chess:portrait"]
+    assert rows[-1][0]["callback_data"] == "menu:account:chess"
 
 
 def test_unknown_account_falls_back_to_generic_menu():

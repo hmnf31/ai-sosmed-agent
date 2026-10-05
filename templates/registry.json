@@ -1,0 +1,86 @@
+{
+  "schema_version": "1.0",
+  "generic": {
+    "id": "generic_card",
+    "account": null,
+    "layout": "standard",
+    "style": null,
+    "watermark": null
+  },
+  "defaults": {
+    "chess": {
+      "square": "chess_tip",
+      "portrait": "chess_tco_announcement",
+      "reel": "chess_match_recap",
+      "story": "chess_tco_reminder"
+    },
+    "wedding": {
+      "square": "wedding_inspiration",
+      "portrait": "wedding_carousel",
+      "reel": "wedding_reel",
+      "story": "wedding_tip"
+    },
+    "mlbb": {
+      "square": "mlbb_patch",
+      "portrait": "mlbb_patch",
+      "reel": "mlbb_mpl",
+      "story": "mlbb_patch"
+    },
+    "fashion": {
+      "square": "fashion_ootd",
+      "portrait": "fashion_ootd",
+      "reel": "fashion_trend",
+      "story": "fashion_trend"
+    }
+  },
+  "templates": [
+    {"id": "mlbb_patch", "account": "mlbb", "content_type": "patch", "layout": "standard"},
+    {"id": "mlbb_hero", "account": "mlbb", "content_type": "hero", "layout": "standard"},
+    {"id": "mlbb_counter", "account": "mlbb", "content_type": "counter", "layout": "standard"},
+    {"id": "mlbb_meta", "account": "mlbb", "content_type": "meta", "layout": "standard"},
+    {"id": "mlbb_build", "account": "mlbb", "content_type": "build", "layout": "standard"},
+    {"id": "mlbb_mpl", "account": "mlbb", "content_type": "mpl", "layout": "standard"},
+    {"id": "mlbb_esports", "account": "mlbb", "content_type": "esports", "layout": "standard"},
+    {"id": "mlbb_match_analysis", "account": "mlbb", "content_type": "analisis", "layout": "standard"},
+    {"id": "mlbb_tip", "account": "mlbb", "content_type": "tips", "layout": "standard"},
+    {"id": "mlbb_trend", "account": "mlbb", "content_type": "tren", "layout": "standard"},
+
+    {"id": "wedding_tip", "account": "wedding", "content_type": "tips", "layout": "standard"},
+    {"id": "wedding_checklist", "account": "wedding", "content_type": "checklist", "layout": "standard"},
+    {"id": "wedding_trend", "account": "wedding", "content_type": "trend", "layout": "standard"},
+    {"id": "wedding_inspiration", "account": "wedding", "content_type": "inspirasi", "layout": "standard"},
+    {"id": "wedding_carousel", "account": "wedding", "content_type": "carousel", "layout": "standard"},
+    {"id": "wedding_quote", "account": "wedding", "content_type": "caption", "layout": "standard"},
+    {"id": "wedding_mistake", "account": "wedding", "content_type": "problem_solution", "layout": "standard"},
+    {"id": "wedding_reel", "account": "wedding", "content_type": "reels", "layout": "standard"},
+
+    {"id": "fashion_ootd", "account": "fashion", "content_type": "ootd", "layout": "standard"},
+    {"id": "fashion_styling", "account": "fashion", "content_type": "styling", "layout": "standard"},
+    {"id": "fashion_mix_match", "account": "fashion", "content_type": "mixmatch", "layout": "standard"},
+    {"id": "fashion_1_item_3_looks", "account": "fashion", "content_type": "styling", "layout": "standard"},
+    {"id": "fashion_campus", "account": "fashion", "content_type": "ootd", "layout": "standard"},
+    {"id": "fashion_work", "account": "fashion", "content_type": "ootd", "layout": "standard"},
+    {"id": "fashion_hijab", "account": "fashion", "content_type": "hijab", "layout": "standard"},
+    {"id": "fashion_accessory", "account": "fashion", "content_type": "accessory", "layout": "standard"},
+    {"id": "fashion_trend", "account": "fashion", "content_type": "trend", "layout": "standard"},
+    {"id": "fashion_problem_solution", "account": "fashion", "content_type": "problem_solution", "layout": "standard"},
+    {"id": "fashion_affiliate", "account": "fashion", "content_type": "affiliate", "layout": "standard"},
+
+    {"id": "chess_tip", "account": "chess", "content_type": "tips", "layout": "standard"},
+    {"id": "chess_eljasa", "account": "chess", "content_type": "eljasa", "layout": "standard"},
+    {"id": "chess_puzzle", "account": "chess", "content_type": "opening", "layout": "standard"},
+    {"id": "chess_endgame", "account": "chess", "content_type": "endgame", "layout": "standard"},
+    {"id": "chess_news", "account": "chess", "content_type": "news", "layout": "standard"},
+    {"id": "chess_match_recap", "account": "chess", "content_type": "event", "layout": "standard"},
+    {"id": "chess_community", "account": "chess", "content_type": "community", "layout": "standard"},
+    {"id": "chess_announcement", "account": "chess", "content_type": "announcement", "layout": "standard"},
+    {"id": "chess_trend", "account": "chess", "content_type": "trend", "layout": "standard"},
+
+    {"id": "chess_tco_announcement", "account": "chess", "content_type": "tco_weekly", "layout": "standard"},
+    {"id": "chess_tco_reminder", "account": "chess", "content_type": "tco_reminder", "layout": "standard"},
+    {"id": "chess_liga_standings", "account": "chess", "content_type": "league_standing", "layout": "table"},
+    {"id": "chess_liga_news", "account": "chess", "content_type": "liga_news", "layout": "standard"},
+    {"id": "chess_arena_announcement", "account": "chess", "content_type": "arena_schedule", "layout": "standard"},
+    {"id": "chess_arena_reminder", "account": "chess", "content_type": "arena_reminder", "layout": "standard"}
+  ]
+}

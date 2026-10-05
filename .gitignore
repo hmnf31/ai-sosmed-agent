@@ -24,6 +24,10 @@ Thumbs.db
 *.log
 output/
 
+# Aset branding hasil build. Logo dan watermark digambar ulang dari
+# branding/<akun>/brand.json, jadi cukup config yang di-commit.
+assets/branding/*/*.png
+
 # Konfigurasi akun lokal (accounts.example.json yang dipakai sebagai template)
 accounts.json
 

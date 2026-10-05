@@ -27,6 +27,8 @@ def _wib_now():
 def _active_source():
     if os.getenv("SHEET_CREDENTIALS_JSON"):
         return "SHEET_CREDENTIALS_JSON (Google Sheets)"
+    if sheet_mod._public_id():
+        return f"SHEET_PUBLIC_ID -> {sheet_mod._public_id()}"
     if sheet_mod._xlsx_path():
         return f"SHEET_XLSX_PATH -> {sheet_mod._xlsx_path()}"
     if sheet_mod._csv_path():
@@ -34,12 +36,25 @@ def _active_source():
     return None
 
 
+def check_tabs():
+    """Tampilkan tab yang benar-benar ada, supaya tab yang kurang kelihatan."""
+    print("\n=== TAB YANG TERSEDIA ===")
+    tabs = sheet_mod.available_tabs()
+    if not tabs:
+        print("  belum ada sumber spreadsheet yang dikonfigurasi.")
+        return False
+    for source, names in tabs.items():
+        print(f"  {source}: {', '.join(names) if names else '(tidak terbaca)'}")
+    return True
+
+
 def check_tco():
     print("\n=== TCO ===")
     schedule = sheet_mod.get_tco_schedule()
     if not schedule["found"]:
         print(f"  belum ada jadwal: {schedule.get('reason')}")
-        print("  isi sheet TCO dengan tanggal hari ini atau tanggal Rabu terdekat.")
+        print("  sheet TCO butuh kolom Tanggal, Waktu, Format, Lokasi, Link,")
+        print("  Keterangan. Isi juga Judul dan Mode untuk customize pesan.")
         return False
     print(f"  tanggal : {schedule['tanggal']} ({schedule['tanggal_teks']})")
     print(f"  waktu   : {schedule['waktu'] or '-'}")
@@ -51,20 +66,21 @@ def check_tco():
 
 
 def check_league():
-    print("\n=== LIGA ===")
+    print("\n=== KLASEMEN (SPREADSHEET) ===")
     rows, source = sheet_mod.get_league_standings()
     if isinstance(rows, str):
         print(f"  gagal dibaca: {rows}")
         return False
     if not rows:
         print(f"  belum ada klasemen (sumber: {source})")
-        print("  isi sheet Liga: Liga, Rank, Nama, Main, Menang, Seri, Kalah, Poin.")
+        print("  sheet klasemen butuh kolom: Liga, Rank, Nama, Main, Menang,")
+        print("  Seri, Kalah, Poin. Nama tab yang diterima juga Standings.")
         return False
     leagues = []
     for row in rows:
         if row["liga"] and row["liga"] not in leagues:
             leagues.append(row["liga"])
-    print(f"  sumber     : {source}")
+    print(f"  sumber      : {source}")
     print(f"  jumlah baris: {len(rows)}")
     print(f"  liga ada    : {', '.join(leagues)}")
     for row in rows[:5]:
@@ -192,6 +208,7 @@ def main():
     if not source:
         print("\nSUMBER SPREADSHEET BELUM DISET.")
         print("Isi salah satu di .env:")
+        print("  SHEET_PUBLIC_ID=<id sheet Google publik>   (paling cepat)")
         print("  SHEET_XLSX_PATH=club-data.xlsx")
         print("  atau SHEET_CREDENTIALS_JSON={...} (Google Sheets)")
         print("Template tersedia: scripts/make_sheet_template.py")
@@ -200,6 +217,7 @@ def main():
         ok.append(True)
     else:
         print(f"sumber aktif: {source}")
+        check_tabs()
         ok.extend([check_tco(), check_league(), check_arena()])
         check_template_rows()
 

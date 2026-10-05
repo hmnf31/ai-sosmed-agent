@@ -1,0 +1,59 @@
+{
+  "schema_version": "1.0",
+  "account": "wedding",
+  "label": "Wedding Organizer",
+  "handle": "@wedding.ko",
+  "mark": "ring",
+  "monogram": "WO",
+  "style_preset": "wedding_elegant",
+  "identity": {
+    "style": "elegant_warm_minimal",
+    "visual_mood": ["elegan", "hangat", "romantis", "bersih", "premium"],
+    "design_density": "low",
+    "image_style": "editorial_wedding"
+  },
+  "colors": {
+    "background": "#FBF6F1",
+    "background_alt": "#F1E2DE",
+    "surface": "#FFFFFF",
+    "primary": "#7A4F5D",
+    "secondary": "#B07D62",
+    "accent": "#B07D62",
+    "text": "#3B2F33",
+    "muted": "#8C7A7F",
+    "on_primary": "#FFFFFF"
+  },
+  "typography": {
+    "heading_font": "bold",
+    "body_font": "regular",
+    "label_font": "bold"
+  },
+  "generation_style": {
+    "tone": "hangat, elegan, bisa dipercaya, penuh perhatian",
+    "sentence_style": "warm_narrative",
+    "hook_style": "emotional_question",
+    "cta_style": "polite_invitation",
+    "emoji_level": "low",
+    "vocabulary": "pernikahan, rangkaian acara, tamu, kerja sama vendor, hari-H"
+  },
+  "watermark": {
+    "type": "logo_plus_handle",
+    "variants": {
+      "primary": {"plate": "#7A4F5D", "logo": "#FFFFFF", "text": "#FFFFFF"},
+      "on_light": {"plate": null, "logo": "#7A4F5D", "text": "#3B2F33"},
+      "on_dark": {"plate": null, "logo": "#FFFFFF", "text": "#FFFFFF"}
+    },
+    "position": "bottom_right",
+    "opacity": 0.82,
+    "scale": 0.13,
+    "margin": 56,
+    "safe_area": true
+  },
+  "templates": {
+    "square": ["wedding_inspiration", "wedding_tip", "wedding_checklist", "wedding_quote"],
+    "portrait": ["wedding_carousel", "wedding_trend", "wedding_mistake"],
+    "reel": ["wedding_reel", "wedding_tip"],
+    "story": ["wedding_tip"]
+  },
+  "default_template": "wedding_inspiration"
+}

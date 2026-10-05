@@ -1,0 +1,66 @@
+{
+  "schema_version": "1.0",
+  "account": "fashion",
+  "label": "Fashion Affiliate",
+  "handle": "@gaya.pakai",
+  "mark": "hanger",
+  "monogram": "FP",
+  "style_preset": "fashion_editorial",
+  "identity": {
+    "style": "clean_editorial_lifestyle",
+    "visual_mood": ["modern", "bersahabat", "praktis", "stylish", "hemat"],
+    "design_density": "medium",
+    "image_style": "editorial_ootd"
+  },
+  "colors": {
+    "background": "#FAF7F3",
+    "background_alt": "#EADFD4",
+    "surface": "#FFFFFF",
+    "primary": "#2E2A28",
+    "secondary": "#C2703F",
+    "accent": "#C2703F",
+    "text": "#23201E",
+    "muted": "#7A706A",
+    "on_primary": "#FFFFFF"
+  },
+  "typography": {
+    "heading_font": "bold",
+    "body_font": "regular",
+    "label_font": "bold"
+  },
+  "generation_style": {
+    "tone": "santai, praktikal, feminin",
+    "sentence_style": "conversational",
+    "hook_style": "relatable_problem",
+    "cta_style": "soft_direct_cta",
+    "emoji_level": "medium",
+    "vocabulary": "ootd, styling, item, warna, paduan"
+  },
+  "watermark": {
+    "type": "logo_plus_handle",
+    "variants": {
+      "primary": {"plate": "#2E2A28", "logo": "#FFFFFF", "text": "#FFFFFF"},
+      "on_light": {"plate": null, "logo": "#2E2A28", "text": "#23201E"},
+      "on_dark": {"plate": null, "logo": "#FFFFFF", "text": "#FFFFFF"}
+    },
+    "position": "bottom_right",
+    "opacity": 0.8,
+    "scale": 0.12,
+    "margin": 56,
+    "safe_area": true
+  },
+  "templates": {
+    "square": [
+      "fashion_ootd",
+      "fashion_mix_match",
+      "fashion_campus",
+      "fashion_hijab",
+      "fashion_accessory",
+      "fashion_affiliate"
+    ],
+    "portrait": ["fashion_ootd", "fashion_1_item_3_looks", "fashion_work"],
+    "reel": ["fashion_trend", "fashion_problem_solution", "fashion_ootd"],
+    "story": ["fashion_trend", "fashion_campus"]
+  },
+  "default_template": "fashion_ootd"
+}

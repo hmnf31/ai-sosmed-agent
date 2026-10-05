@@ -16,6 +16,8 @@ import time
 import uuid
 from logging.handlers import RotatingFileHandler
 
+from branding import loader as brand_mod
+from branding import style_registry, validator
 from utils import accounts as accounts_mod
 from utils import engines
 from utils import history as history_mod
@@ -25,7 +27,8 @@ from utils.chess import arena as chess_arena
 from utils.chess import liga as chess_liga
 from utils.chess import tco as chess_tco
 from utils.content_generator import generate_content
-from utils.image_maker import render_content_image
+from utils.image_maker import render_content_card, render_content_image
+from utils.media import asset_loader, layout_engine
 from utils.notifier import (
     answer_callback,
     edit_chat_message,
@@ -121,6 +124,8 @@ Perintah
 /menu - tombol pilih akun
 /akun - daftar akun
 /riwayat [akun] - konten terbaru
+/preview [akun] [image|video|portrait] - contoh tampilan brand akun
+/style [akun] - ringkasan warna, template, dan watermark akun
 /status - status bot dan jumlah konten
 /bantu - panduan ini
 
@@ -193,11 +198,19 @@ def build_package(intent, account, chat_id="", request_id=None):
     topics = _collect_topics(account, request)
     info(f"[{_stamp(chat_id)}] topik {label}: {'; '.join(topics)}")
 
+    # Brand Profile dibaca sekali lalu dipakai bersama: prompt AI, renderer, dan
+    # QA. Dengan begitu satu konten tidak mungkin punya gaya dan tanda tangan
+    # dari dua akun berbeda.
+    brand = brand_mod.brand_for(account)
+    if brand.get("synthetic"):
+        warn(f"akun {label} belum punya brand.json, memakai gaya generik")
+
     content = generate_content(
         request, topics, account,
         category=brief.get("category"),
         avoid_topics=brief.get("avoid_topics"),
         angle_hint=brief.get("angle_hint", ""),
+        brand=brand,
     )
     content["instructions"] = engine.extra_instructions(brief)
     fmt = _requested_format(intent)
@@ -218,9 +231,18 @@ def build_package(intent, account, chat_id="", request_id=None):
     content_id = record["id"]
 
     if fmt == "image":
-        media = render_content_image(content, footer=account.get("label", ""))
+        media = render_content_image(content, footer=account.get("label", ""),
+                                     brand=brand, category=brief.get("category"))
     else:
-        media = render_content_video(content, footer=account.get("handle") or account.get("label", ""))
+        media = render_content_video(content,
+                                     footer=account.get("handle") or account.get("label", ""),
+                                     brand=brand, category=brief.get("category"))
+
+    template = style_registry.select_template(account["id"],
+                                              content_type=brief.get("category"), fmt=fmt)
+    qa = _check_branding(media, account, brand, template, fmt)
+    for problem in qa:
+        warn(f"[{_stamp(chat_id)}] branding: {problem}")
 
     history_mod.set_file(content_id, media, caption=content.get("caption"))
 
@@ -232,6 +254,9 @@ def build_package(intent, account, chat_id="", request_id=None):
         "account": account,
         "content_id": content_id,
         "request_id": request_id,
+        "brand": brand,
+        "template": template,
+        "branding_problems": qa,
     }
     info(
         f"[{_stamp(chat_id)}] {label} selesai: {content_id} {fmt} {os.path.basename(media)} "
@@ -245,6 +270,20 @@ def _stamp(chat_id):
     return f"chat {chat_id}" if chat_id else "klien"
 
 
+def _check_branding(media, account, brand, template, fmt):
+    """QA branding untuk satu file hasil render.
+
+    Yang dicek hanya hal yang bisa dipastikan tanpa menebak: file ada, ukuran
+    kanvas sesuai format, template milik akun, dan varian watermark tersedia.
+    Daftar kosong berarti aman dikirim.
+    """
+    canvas = asset_loader.canvas_for(fmt)
+    return validator.verify_render(
+        media, account["id"], template=template, brand=brand,
+        expected_size=layout_engine.canvas_size(canvas),
+    )
+
+
 def _reply(chat_id, package):
     account = package["account"]
     content = package["content"]
@@ -252,16 +291,22 @@ def _reply(chat_id, package):
     sent = send_telegram_media(package["media"], chat_id=chat_id)
 
     content_id = package.get("content_id")
+    template = package.get("template") or {}
+    problems = package.get("branding_problems") or []
     lines = [
         f"Selesai untuk {account.get('label')} ({account.get('handle')})",
         f"ID: {content_id or '-'}",
         f"Topik: {'; '.join(package['topics'])}",
     ]
+    if template.get("id"):
+        lines.append(f"Template: {template['id']}")
     if content.get("angle"):
         lines.append(f"Sudut pandang: {content['angle']}")
     # URL dikirim polos supaya bisa langsung disalin dan diklik.
     if content.get("source_url"):
         lines.append(f"Sumber: {content['source_url']}")
+    if problems:
+        lines.append("Catatan branding: " + "; ".join(problems))
     lines.extend(["", "Caption (salin manual):", content["caption"]])
 
     send_chat_message("\n".join(lines), chat_id=chat_id)
@@ -312,7 +357,108 @@ def _handle_command(chat_id, text):
             account = found or account
         _reply_history(chat_id, account)
         return True
+    if command.startswith("/preview"):
+        _handle_preview(chat_id, text)
+        return True
+    if command.startswith("/style"):
+        _handle_style(chat_id, text)
+        return True
     return False
+
+
+#: Contoh isi untuk preview. Menentukan tampilan tanpa memanggil AI, supaya
+#: gaya bisa dicek kapan saja tanpa memakai kuota.
+PREVIEW_CONTENT = {
+    "title": "Contoh judul konten",
+    "subtitle": "Sub judul satu kalimat penjelas",
+    "points": [
+        "Poin pertama yang selalu terbaca",
+        "Poin kedua yang tidak melebihi batas baris",
+        "Poin ketiga yang menutup daftar",
+    ],
+    "cta": "Simpan dan cek lagi nanti",
+    "caption": "Caption contoh untuk preview.",
+    "hashtags": ["#Preview"],
+}
+
+
+def _account_and_format(text, default=None):
+    """Ambil akun dan format dari argumen perintah, tanpa router."""
+    parts = text.split()[1:]
+    fmt = default
+    words = []
+    for part in parts:
+        lowered = part.lower()
+        if lowered in ("image", "gambar", "square"):
+            fmt = "image"
+        elif lowered in ("video", "reel", "story"):
+            fmt = "video"
+        elif lowered == "portrait":
+            fmt = "portrait"
+        else:
+            words.append(part)
+    account = accounts_mod.find_account(" ".join(words)) if words else None
+    return account or accounts_mod.default_account(), fmt
+
+
+def _handle_preview(chat_id, text):
+    """Kirim contoh render sesuai brand akun, tanpa memanggil AI."""
+    account, requested = _account_and_format(text, default="image")
+    fmt = requested if requested != "portrait" else "square"
+    brand = brand_mod.brand_for(account)
+    template = style_registry.select_template(account["id"], fmt=fmt)
+
+    try:
+        if requested == "portrait":
+            from utils.media import template_engine
+
+            result = template_engine.render_card(PREVIEW_CONTENT, brand,
+                                                 output_dir=layout_engine.output_dir(),
+                                                 fmt="portrait")
+        else:
+            result = render_content_card(PREVIEW_CONTENT, brand=brand,
+                                         account=account, category=None, fmt=fmt)
+    except Exception as e:
+        error(f"preview gagal: {e}")
+        send_chat_message(f"Preview gagal: {e}", chat_id=chat_id)
+        return
+
+    problems = validator.verify_render(result["path"], account["id"], template=template,
+                                       brand=brand, expected_size=result["size"])
+    lines = [
+        f"Preview {account.get('label')} ({fmt})",
+        f"Template: {template.get('id')} | style: {result['brand'].get('style_preset')}",
+        f"Ukuran: {result['size'][0]}x{result['size'][1]} | "
+        f"watermark: {result['watermark'].get('variant')}",
+    ]
+    masalah = problems + result.get("problems", [])
+    if masalah:
+        lines.append("Catatan: " + "; ".join(masalah))
+    send_telegram_media(result["path"], caption="\n".join(lines), chat_id=chat_id)
+
+
+def _handle_style(chat_id, text):
+    """Ringkasan brand profile satu akun: warna, template, watermark."""
+    account, _ = _account_and_format(text)
+    brand = brand_mod.brand_for(account)
+    colors = brand.get("colors") or {}
+    watermark = brand.get("watermark") or {}
+    voice = brand.get("generation_style") or {}
+
+    lines = [
+        f"Brand {account.get('label')} ({brand.get('handle')})",
+        f"Profil: {brand.get('account')} | style: {brand.get('style_preset')}"
+        + (" (SINTETIS, belum ada brand.json)" if brand.get("synthetic") else ""),
+        f"Mark: {brand.get('mark')} | monogram: {brand.get('monogram')}",
+        "Warna: " + ", ".join(f"{k} {v}" for k, v in colors.items() if k != "on_primary"),
+        f"Watermark: {watermark.get('position')} skala {watermark.get('scale')} "
+        f"opasitas {watermark.get('opacity')} varian "
+        + ", ".join(sorted((watermark.get("variants") or {}))),
+        "Gaya tulis: " + ", ".join(f"{k}={v}" for k, v in voice.items() if v),
+    ]
+    problems = validator.validate_profile(brand)
+    lines.append("Validasi: " + ("lengkap" if not problems else "; ".join(problems)))
+    send_chat_message("\n".join(lines), chat_id=chat_id)
 
 
 def handle_callback(chat_id, message_id, callback_id, data):
@@ -334,6 +480,28 @@ def handle_callback(chat_id, message_id, callback_id, data):
         account = accounts_mod.find_account(account_id)
         if account:
             _reply_history(chat_id, account)
+        return True
+
+    if data.startswith(keyboards.STYLE_PREFIX):
+        account_id = data[len(keyboards.STYLE_PREFIX):]
+        _handle_style(chat_id, f"/style {account_id}")
+        return True
+
+    if data.startswith(keyboards.PREVIEW_PREFIX):
+        payload = data[len(keyboards.PREVIEW_PREFIX):]
+        account_id, _, fmt = payload.partition(":")
+        account = accounts_mod.find_account(account_id)
+        if not account:
+            send_chat_message("Akun tidak dikenal.", chat_id=chat_id)
+            return True
+        if not fmt:
+            edit_chat_message(chat_id, message_id,
+                              f"Preview tampilan {account.get('label')}:",
+                              reply_markup=keyboards.preview_markup(account_id))
+            return True
+        edit_chat_message(chat_id, message_id, f"Diproses: preview {account_id} {fmt}",
+                          reply_markup=None)
+        _handle_preview(chat_id, f"/preview {account_id} {fmt}")
         return True
 
     if data.startswith(keyboards.ACCOUNT_PREFIX):
@@ -574,7 +742,9 @@ def _render_club_poster(package, account):
         "caption": package.get("caption") or "",
         "hashtags": account.get("hashtags", [])[:3],
     }
-    return render_content_image(content, footer=account.get("label", ""))
+    category = package.get("category") or "tco_weekly"
+    return render_content_image(content, footer=account.get("label", ""),
+                                brand=brand_mod.brand_for(account), category=category)
 
 
 def _duplicate_note(account_id, topic):

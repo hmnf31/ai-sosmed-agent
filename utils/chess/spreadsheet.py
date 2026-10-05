@@ -6,13 +6,22 @@ status yang jelas, bukan angka tebakan.
 
 Tiga sumber yang didukung:
 - Google Sheets REST API v4 lewat service account JSON.
+- Google Sheets publik yang dibagikan "siapa saja dengan link". Tidak butuh
+  kredensial, cukup `SHEET_PUBLIC_ID`.
 - CSV lokal untuk dipakai tanpa kredensial apa pun.
 - File .xlsx lokal, dibaca tanpa kredensial.
+
+Sumber dibaca berurutan dan berhenti di sumber pertama yang benar-benar punya
+baris untuk range itu. Jadi spreadsheet publik bisaoclassemen tanpa TCO,
+sementara jadwal TCO tetap diambil dari file lokal. Tidak ada sumber yang
+dipaksa代替 padahal isinya tidak ada.
 """
 import csv
 import io
 import json
 import os
+import re
+import time
 from datetime import datetime, timedelta, timezone
 
 import requests
@@ -22,18 +31,32 @@ TOKEN_URL = "https://oauth2.googleapis.com/token"
 SCOPE = "https://www.googleapis.com/auth/spreadsheets.readonly"
 TIMEOUT = 30
 
+# Spreadsheet publik diunduh sekali sebagai .xlsx utuh supaya daftar tabnya
+# ikut terbaca. Tanpa cache, satu siklus bot mengunduh workbook tiga kali.
+PUBLIC_EXPORT_URL = "https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=xlsx"
+PUBLIC_CACHE_TTL = 300
+_PUBLIC_CACHE = {}
+
 RANGE_TCO = "TCO!A2:Z50"
 RANGE_LEAGUE = "Liga!A2:Z500"
 # Sheet Arena berisi konfigurasi, bukan daftar acara: dua kolom kunci dan nilai.
 RANGE_ARENA_CONFIG = "Arena!A2:B20"
 
+# Nama tab pengganti untuk range yang dipakai modul. Sheet milik panitia bisa
+# memakai nama lain, jadi pemetaan ditulis eksplisit, bukan tebakan.
+TAB_ALIASES = {
+    "tco": ("TCO", "Jadwal", "Jadwal TCO", "Internal Mingguan"),
+    "liga": ("Liga", "Standings", "Klasemen"),
+    "arena": ("Arena", "Arena Kings", "Pengaturan"),
+}
+
 # Nama header yang diterima. Spreadsheet milik pengguna bisa beda kapitalisasi.
 HEADER_ALIASES = {
     "liga": ("liga", "league", "divisi", "division"),
-    "rank": ("rank", "peringkat", "pos", "position"),
+    "rank": ("rank", "peringkat", "pos", "position", "posisi"),
     "nama": ("nama", "name", "player", "pemain", "peserta", "anggota"),
     "main": ("main", "played", "match", "match played", "pertandingan"),
-    "menang": ("menang", "win", "wins", "won", "menang"),
+    "menang": ("menang", "win", "wins", "won"),
     "seri": ("seri", "draw", "draws", "tie", " seri"),
     "kalah": ("kalah", "loss", "losses", "lost"),
     "poin": ("poin", "point", "points", "score", "skor"),
@@ -43,9 +66,19 @@ HEADER_ALIASES = {
     "lokasi": ("lokasi", "location", "venue", "tempat"),
     "link": ("link", "url", "tautan", "turnamen link", "link klub", "club link"),
     "keterangan": ("keterangan", "catatan", "note", "notes", "deskripsi"),
-    "multiklub": ("multiklub", "multi klub", "multi-club", "terbuka"),
+"multiklub": ("multiklub", "multi klub", "multi-club", "terbuka"),
     "judul": ("judul", "title", "heading", "nama acara", "nama turnamen"),
     "mode": ("mode", "jenis", "tipe", "type", "kategori"),
+}
+
+# Alias yang hanya boleh cocok persis, bukan ikut Startswith/endswith.
+# Dipakai untuk kolom satu huruf milik sheet publik TCO (mp, w, d, l). Tanpa
+# aturan ini, "wo_count" akan dianggap kolom menang karena diawali "w".
+EXACT_HEADER_ALIASES = {
+    "main": ("mp",),
+    "menang": ("w",),
+    "seri": ("d",),
+    "kalah": ("l",),
 }
 
 # Nama kunci konfigurasi yang dikenali di sheet Arena.
@@ -83,12 +116,22 @@ def _wib_now():
 
 
 def is_configured():
-    """True bila ada cara membaca spreadsheet: service account, CSV, atau XLSX."""
+    """True bila ada cara membaca spreadsheet: service account, publik, CSV, XLSX."""
     return (
         bool(os.getenv("SHEET_CREDENTIALS_JSON"))
+        or bool(_public_id())
         or bool(_csv_path())
         or bool(_xlsx_path())
     )
+
+
+def _public_id():
+    """ID spreadsheet publik. Menerima ID polos maupun URL lengkap."""
+    raw = (os.getenv("SHEET_PUBLIC_ID") or "").strip()
+    if not raw:
+        return ""
+    match = re.search(r"/spreadsheets/d/([a-zA-Z0-9-_]+)", raw)
+    return match.group(1) if match else raw
 
 
 def _csv_path():
@@ -106,8 +149,16 @@ def _normalize_header(text):
 
 
 def _field_name(header, field):
-    """Mencocokkan satu header spreadsheet ke field yang kita kenal."""
+    """Mencocokkan satu header spreadsheet ke field yang kita kenal.
+
+    Alias biasa boleh cocok sebagian, jadi "Nama Pemain" tetap dikenali sebagai
+    `nama`. Alias di EXACT_HEADER_ALIASES hanya cocok persis supaya kolom satu
+    huruf tidak menabrak kolom lain yang diawali atau diakhiri huruf itu.
+    """
     normalized = _normalize_header(header)
+    for alias in EXACT_HEADER_ALIASES.get(field, ()):
+        if alias == normalized:
+            return field
     for alias in HEADER_ALIASES.get(field, (field,)):
         if alias == normalized:
             return field
@@ -117,10 +168,15 @@ def _field_name(header, field):
 
 
 def _row_to_dict(header, row):
-    """Mengubah satu baris menjadi dict memakai header yang dikenali."""
+    """Mengubah satu baris menjadi dict memakai header yang dikenali.
+
+    `header` adalah pemetaan indeks kolom ke nama field, bukan daftar, jadi
+    pencarian memakai `.get()`. Kolom yang tidak dikenali tidak ada di
+    pemetaan, dan baris data boleh lebih pendek daripada baris header.
+    """
     item = {}
     for index, cell in enumerate(row):
-        name = header[index] if index < len(header) else None
+        name = header.get(index)
         if not name:
             continue
         item[name] = str(cell or "").strip()
@@ -128,16 +184,25 @@ def _row_to_dict(header, row):
 
 
 def _to_int(value, default=None):
-    """Mengubah sel spreadsheet menjadi angka.
+    """Mengubah sel spreadsheet menjadi angka bulat.
 
     Sel kosong atau tanda hubung berarti 'tidak ada angka' sehingga nilai
-    `default` dipakai, bukan nol, supaya nol tidak appear sebagai data.
+    `default` dipakai, bukan nol, supaya nol tidak muncul sebagai data.
+
+    Angka desimal dipangkas ke bagian bulatnya. Sheet publik menyimpan poin
+    sebagai `4.0`, dan `4.0` tidak boleh terbaca sebagai 40.
     """
     text = str(value or "").strip()
     if not text or text in {"-", "–", "—"}:
         return default
-    digits = "".join(ch for ch in text if ch.isdigit())
-    return int(digits) if digits else default
+
+    match = re.search(r"-?\d+(?:\.\d+)?", text.replace(",", "."))
+    if not match:
+        return default
+    try:
+        return int(float(match.group(0)))
+    except ValueError:
+        return default
 
 
 def _access_token(credentials):
@@ -183,11 +248,119 @@ def _jwt(claims, private_key):
     return f"{body}.{base64.urlsafe_b64encode(signature).rstrip(b'=').decode()}"
 
 
-def read_range(rng):
-    """Membaca satu range spreadsheet sebagai list of list.
+def available_tabs():
+    """Nama tab yang bisa dibaca per sumber, untuk laporan pemeriksa.
 
-    Mengembalikan (rows, sumber). rows kosong berarti tidak ada sumber yang
-    terkonfigurasi; pemanggil harus melaporkan kondisi ini secara langsung.
+    Mengembalikan dict sumber -> daftar tab. Sumber yang tidak dikonfigurasi
+    sengaja tidak muncul supaya laporan tidak menyesatkan.
+    """
+    result = {}
+
+    if _public_id():
+        try:
+            result["google_public"] = sorted(_public_tables())
+        except ValueError:
+            result["google_public"] = []
+
+    xlsx_file = _xlsx_path()
+    if xlsx_file:
+        try:
+            from openpyxl import load_workbook
+
+            workbook = load_workbook(xlsx_file, read_only=True)
+            try:
+                result["xlsx"] = sorted(workbook.sheetnames)
+            finally:
+                workbook.close()
+        except Exception:
+            result["xlsx"] = []
+
+    if _csv_path():
+        result["csv"] = ["(satu file untuk semua range)"]
+    return result
+
+
+def _public_tables():
+    """Unduh spreadsheet publik sekali, lalu simpan daftar tabnya di cache.
+
+    Workbook diunduh sebagai .xlsx utuh, bukan per tab, karena nama tabnya
+    dibutuhkan untuk memutuskan apakah sebuah range benar-benar tersedia.
+    """
+    sheet_id = _public_id()
+    if not sheet_id:
+        return {}
+
+    now = time.monotonic()
+    cached = _PUBLIC_CACHE.get(sheet_id)
+    if cached and now - cached["at"] < PUBLIC_CACHE_TTL:
+        return cached["tables"]
+
+    response = requests.get(
+        PUBLIC_EXPORT_URL.format(sheet_id=sheet_id),
+        timeout=TIMEOUT,
+    )
+    if response.status_code != 200:
+        raise ValueError(
+            f"Spreadsheet publik tidak bisa dibaca (HTTP {response.status_code}). "
+            "Pastikan dibagikan sebagai 'Siapa saja dengan link'."
+        )
+    if not response.content.startswith(b"PK"):
+        raise ValueError(
+            "Spreadsheet publik membalas halaman web, bukan file .xlsx. "
+            "Kemungkinan sheet belum dibagikan dengan benar."
+        )
+
+    try:
+        from openpyxl import load_workbook
+    except ImportError as e:
+        raise ValueError(
+            "openpyxl belum terpasang. Jalankan pip install openpyxl."
+        ) from e
+
+    workbook = load_workbook(io.BytesIO(response.content), read_only=True, data_only=True)
+    try:
+        tables = {}
+        for name in workbook.sheetnames:
+            worksheet = workbook[name]
+            rows = [
+                ["" if cell is None else str(cell).strip() for cell in row]
+                for row in worksheet.iter_rows(values_only=True)
+            ]
+            while rows and not any(rows[-1]):
+                rows.pop()
+            tables[name.strip().lower()] = rows
+    finally:
+        workbook.close()
+
+    _PUBLIC_CACHE[sheet_id] = {"at": now, "tables": tables}
+    return tables
+
+
+def _resolve_public_tab(wanted):
+    """Mencari tab yang cocok untuk sebuah range, termasuk lewat alias.
+
+    Tanpa alias, sheet yang menamai tabnya "Standings" akan selalu terbaca
+    kosong padahal isinya justru klasemen.
+    """
+    tables = _public_tables()
+    key = wanted.strip().lower()
+    if key in tables:
+        return tables[key], wanted.strip()
+
+    for alias in TAB_ALIASES.get(key, ()):
+        candidate = alias.strip().lower()
+        if candidate in tables:
+            return tables[candidate], alias.strip()
+    return [], None
+
+
+def _read_range(rng):
+    """Membaca satu range dari sumber aktif.
+
+    Urutan sumber: kredensial Google, spreadsheet publik, CSV, lalu XLSX.
+    Setiap sumber hanya dipakai kalau benar-benar punya tab atau baris untuk
+    range itu. Jadi Liga bisa diambil dari sheet publik sementara jadwal TCO
+    tetap dari file lokal, tanpa saling menimpa.
     """
     credentials_json = os.getenv("SHEET_CREDENTIALS_JSON")
     if credentials_json:
@@ -209,19 +382,33 @@ def read_range(rng):
             raise ValueError(f"Gagal baca spreadsheet (HTTP {response.status_code}).")
         return response.json().get("values", []), "google_sheets"
 
-    # Urutan prioritas: kredensial Google, lalu CSV, lalu XLSX. CSV menang
-    # supaya mudah dipakai sebagai pengganti sementara saat menguji.
+    sheet_name = rng.split("!")[0]
+
+    if _public_id():
+        rows, tab = _resolve_public_tab(sheet_name)
+        if rows:
+            return rows, f"google_public:{tab}"
+
+    # CSV menang atas XLSX supaya mudah dipakai sebagai pengganti sementara
+    # saat menguji, tanpa perlu menghapus file club-data.xlsx.
     csv_file = _csv_path()
     if csv_file:
         with open(csv_file, newline="", encoding="utf-8-sig") as handle:
             content = handle.read()
-        return list(csv.reader(io.StringIO(content))), "csv"
+        rows = list(csv.reader(io.StringIO(content)))
+        if rows:
+            return rows, "csv"
 
     xlsx_file = _xlsx_path()
     if xlsx_file:
         return _read_xlsx(xlsx_file, rng)
 
     return [], "tidak_ada"
+
+
+def read_range(rng):
+    """Pembaca range yang dipakai modul: mengembalikan (rows, sumber)."""
+    return _read_range(rng)
 
 
 def _read_xlsx(path, rng):
@@ -308,13 +495,39 @@ def _records(rng, required=("nama",)):
 
 
 def _row_mapping(row):
-    """Memetakan satu baris ke nama field yang dikenali."""
-    mapping = {}
-    for column, header in enumerate(row):
+    """Memetakan satu baris ke nama field yang dikenali.
+
+    Pencocokan dilakukan dua tahap. Tahap pertama hanya cocok persis, tahap
+    kedua baru cocok sebagian. Urutan ini wajib: kolom `player_id` akan cocok
+    sebagian dengan alias `player`, dan kalau itu terjadi duluan, kolom
+    `name` berikutnya tidak lagi dikenali sebagai field `nama`.
+    """
+    columns = list(enumerate(row))
+
+    exact = {}
+    for column, header in columns:
+        for field in HEADER_ALIASES:
+            if field not in exact.values() and _exact_field_name(header, field):
+                exact[column] = field
+
+    mapping = dict(exact)
+    for column, header in columns:
+        if column in mapping:
+            continue
         for field in HEADER_ALIASES:
             if field not in mapping.values() and _field_name(header, field):
                 mapping[column] = field
     return mapping
+
+
+def _exact_field_name(header, field):
+    """True bila header cocok persis dengan salah satu alias field."""
+    normalized = _normalize_header(header)
+    if not normalized:
+        return False
+    if normalized in EXACT_HEADER_ALIASES.get(field, ()):
+        return True
+    return normalized in HEADER_ALIASES.get(field, (field,))
 
 
 def _row_values(row):

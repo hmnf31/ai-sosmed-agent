@@ -1,0 +1,51 @@
+{
+  "schema_version": "1.0",
+  "id": "fashion_editorial",
+  "account": "fashion",
+  "canvas": {
+    "background": "band_top",
+    "accent_bar": "block",
+    "panel": "solid",
+    "rule": "hairline",
+    "texture": "diagonal_hatch"
+  },
+  "typography": {
+    "heading": "bold",
+    "heading_scale": 0.078,
+    "heading_line_spacing": 1.12,
+    "heading_max_lines": 3,
+    "body": "regular",
+    "body_scale": 0.034,
+    "body_line_spacing": 1.40,
+    "body_max_lines": 2,
+    "label": "bold",
+    "label_scale": 0.027,
+    "label_caps": true,
+    "cta_scale": 0.042
+  },
+  "spacing": {
+    "margin": 0.084,
+    "gap": 0.028,
+    "corner_radius": 22,
+    "panel_padding": 0.036
+  },
+  "shadow": {
+    "enabled": true,
+    "opacity": 0.16,
+    "offset": 5,
+    "blur": 16
+  },
+  "overlay": {
+    "scrim": 0.0,
+    "vignette": 0.0
+  },
+  "icon_style": "line",
+  "point_marker": "dot",
+  "watermark": {
+    "position": "bottom_right",
+    "opacity": 0.8,
+    "scale": 0.12,
+    "margin": 56,
+    "safe_area": true
+  }
+}

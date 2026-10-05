@@ -1,8 +1,10 @@
 """Registry akun: satu file JSON mendefinisikan semua akun yang dikelola.
 
 Schema v2 menambah mode kerja (content / club_operations / affiliate), kategori
-konten, aturan fact-check, dan template default per akun. Field baru bersifat
-opsional supaya file schema v1 lama tetap bisa dibaca.
+konten, aturan fact-check, dan template default per akun. Schema v3 menambah
+`brand_profile` dan `generation_style`, yang menautkan akun ke identitas visual
+dan gaya tulisnya di folder `branding/`. Field baru selalu opsional supaya file
+schema lama tetap bisa dibaca.
 """
 import json
 import os
@@ -29,6 +31,10 @@ DEFAULTS = {
     "tone": "",
     "handle": "",
     "source_query": "",
+    # Nama file Brand Profile di folder branding/. Kosong berarti pakai id akun.
+    "brand_profile": "",
+    # Gaya menulis per akun; boleh menimpa sebagian nilai dari brand profile.
+    "generation_style": {},
 }
 
 
@@ -75,10 +81,16 @@ def load(path=None):
 
 
 def _apply_defaults(account):
-    """Melengkapi field opsional yang kosong supaya pemangled callers aman."""
+    """Melengkapi field opsional yang kosong supaya pemanggil aman.
+
+    Nilai default yang berupa dict/list disalin per akun, supaya satu akun yang
+    diisi tidak mengubah akun lain.
+    """
     for key, fallback in DEFAULTS.items():
         if account.get(key) in (None, "", []):
-            account[key] = list(fallback) if isinstance(fallback, list) else fallback
+            account[key] = dict(fallback) if isinstance(fallback, dict) else (
+                list(fallback) if isinstance(fallback, list) else fallback
+            )
     return account
 
 
@@ -107,6 +119,17 @@ def default_account(path=None):
 def has_mode(account, mode):
     """True bila akun mendukung mode kerja tertentu."""
     return mode in (account or {}).get("mode", [])
+
+
+def brand(account):
+    """Brand Profile milik satu akun.
+
+    Import dilakukan di dalam fungsi supaya modul ini tetap bisa dipakai tanpa
+    mengunduh paket `branding` saat registry akun dibaca.
+    """
+    from branding import loader
+
+    return loader.brand_for(account)
 
 
 def operational_accounts(path=None):

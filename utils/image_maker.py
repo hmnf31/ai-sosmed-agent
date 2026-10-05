@@ -127,55 +127,40 @@ def render_content_video_frames(content, output_dir=None, footer="AI Sosmed Agen
     return paths
 
 
-def render_content_image(content, output_path=None, footer="AI Sosmed Agent"):
-    """Merender kartu 1080x1080 dari konten hasil AI (untuk Instagram atau feed)."""
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
-    if output_path is None:
-        stamp = datetime.now(WIB).strftime("%Y%m%d-%H%M%S")
-        output_path = os.path.join(OUTPUT_DIR, f"konten-{stamp}.png")
+def render_content_card(content, brand=None, account=None, category=None, footer="",
+                        output_path=None, fmt="square"):
+    """Kartu brand-aware beserta detail render-nya.
 
-    title = content.get("title") or "Konten Hari Ini"
-    subtitle = content.get("subtitle") or ""
-    points = [p for p in content.get("points", []) if p]
-    cta = content.get("cta") or ""
+    Mengembalikan dict dari `utils.media.template_engine.render_card`: `path`,
+    `template`, `canvas`, `watermark`, dan `problems`. Dipakai QA dan /preview,
+    yang butuh melihat masalah branding, bukan hanya path file.
+    """
+    from branding import loader
+    from utils.media import template_engine
 
-    image, draw = _gradient_background(WIDTH, HEIGHT)
-
-    margin = 90
-    accent = (255, 196, 84)
-    white = (245, 247, 255)
-    muted = (188, 193, 220)
-
-    draw.rounded_rectangle([margin, 120, margin + 96, 134], radius=7, fill=accent)
-    label_font = _load_font("bold", 34)
-    draw.text((margin, 74), "TREN TERKINI", font=label_font, fill=accent)
-
-    y = _draw_paragraph(
-        draw, _wrap(draw, title.upper(), _load_font("bold", 84), WIDTH - 2 * margin, 3),
-        _load_font("bold", 84), margin, 200, white, 1.2,
+    return template_engine.render_card(
+        content,
+        loader.resolve_brand(account, brand),
+        output_path=output_path,
+        category=category,
+        fmt=fmt,
+        footer=footer,
     )
-    if subtitle:
-        sub_font = _load_font("regular", 40)
-        y = _draw_paragraph(draw, _wrap(draw, subtitle, sub_font, WIDTH - 2 * margin, 3),
-                            sub_font, margin, y + 26, muted, 1.35)
 
-    if points:
-        point_font = _load_font("regular", 38)
-        y += 40
-        for point in points[:3]:
-            y = _draw_paragraph(draw, _wrap(draw, f"- {point}", point_font, WIDTH - 2 * margin, 2),
-                                point_font, margin, y, white, 1.3)
-            y += 8
 
-    body_font = _load_font("regular", 36)
-    _draw_paragraph(draw, [datetime.now(WIB).strftime("%d %B %Y, %H:%M WIB")],
-                    body_font, margin, HEIGHT - 250, white, 1.4)
-    draw.line([(margin, HEIGHT - 200), (WIDTH - margin, HEIGHT - 200)], fill=(255, 255, 255), width=2)
-    _draw_paragraph(draw, [cta or footer], _load_font("bold", 34), margin, HEIGHT - 160, accent, 1.4)
+def render_content_image(content, output_path=None, footer="AI Sosmed Agent",
+                         brand=None, account=None, category=None, fmt="square"):
+    """Kartu 1080x1080 (atau format lain) dari konten hasil AI.
 
-    image.save(output_path, "PNG")
-    print(f"[IMAGE] Kartu konten dibuat: {output_path}")
-    return output_path
+    Tampilan sepenuhnya diambil dari Brand Profile akun lewat
+    `utils.media.template_engine`; fungsi ini hanya menjaga nama dan nilai
+    balik lama supaya pemanggil lain tidak ikut berubah.
+    """
+    result = render_content_card(content, brand=brand, account=account, category=category,
+                                 footer=footer, output_path=output_path, fmt=fmt)
+    for problem in result["problems"]:
+        print(f"[BRAND] {problem}")
+    return result["path"]
 
 
 def render_trend_image(trends, output_path=None, footer="AI Sosmed Agent"):

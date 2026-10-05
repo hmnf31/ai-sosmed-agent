@@ -1,10 +1,11 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "default_account": "chess",
   "accounts": [
     {
       "id": "chess",
       "label": "Klub Catur / TCO",
+      "brand_profile": "chess",
       "handle": "@tco.chess",
       "emoji": "♟️",
       "mode": ["content", "club_operations"],
@@ -43,6 +44,7 @@
     {
       "id": "wedding",
       "label": "Wedding Organizer",
+      "brand_profile": "wedding",
       "handle": "@wedding.ko",
       "emoji": "💍",
       "mode": ["content"],
@@ -82,6 +84,7 @@
     {
       "id": "mlbb",
       "label": "Esports MLBB",
+      "brand_profile": "mlbb",
       "handle": "@mlbb.indo",
       "emoji": "🎮",
       "mode": ["content"],
@@ -124,6 +127,7 @@
     {
       "id": "fashion",
       "label": "Fashion Affiliate",
+      "brand_profile": "fashion",
       "handle": "@gaya.pakai",
       "emoji": "👕",
       "mode": ["content", "affiliate"],

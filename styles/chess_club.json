@@ -1,0 +1,51 @@
+{
+  "schema_version": "1.0",
+  "id": "chess_club",
+  "account": "chess",
+  "canvas": {
+    "background": "gradient_vertical",
+    "accent_bar": "medium",
+    "panel": "outline",
+    "rule": "medium",
+    "texture": "board"
+  },
+  "typography": {
+    "heading": "bold",
+    "heading_scale": 0.070,
+    "heading_line_spacing": 1.14,
+    "heading_max_lines": 4,
+    "body": "regular",
+    "body_scale": 0.034,
+    "body_line_spacing": 1.38,
+    "body_max_lines": 2,
+    "label": "bold",
+    "label_scale": 0.029,
+    "label_caps": true,
+    "cta_scale": 0.044
+  },
+  "spacing": {
+    "margin": 0.080,
+    "gap": 0.026,
+    "corner_radius": 18,
+    "panel_padding": 0.036
+  },
+  "shadow": {
+    "enabled": true,
+    "opacity": 0.28,
+    "offset": 6,
+    "blur": 14
+  },
+  "overlay": {
+    "scrim": 0.06,
+    "vignette": 0.16
+  },
+  "icon_style": "line",
+  "point_marker": "rank",
+  "watermark": {
+    "position": "bottom_right",
+    "opacity": 0.85,
+    "scale": 0.12,
+    "margin": 56,
+    "safe_area": true
+  }
+}

@@ -34,6 +34,9 @@ PROFIL AKUN
 - Audiens: {audience}
 - Nada bicara: {tone}
 
+GAYA TULIS AKUN
+{voice}
+
 PERMINTAAN PEMAKAI
 "{request}"
 
@@ -74,6 +77,37 @@ FALLBACK_POINTS = [
     "Langkah berikutnya jelas",
 ]
 
+#: Nilai enum di `generation_style` diterjemahkan ke arahan yang bisa dibaca model.
+# Enum tetap dipakai di config supaya mudah divalidasi, tapi model perlu kalimat.
+VOICE_GUIDE = {
+    "sentence_style": {
+        "natural_indonesian": "kalimat mengalir seperti orang biasa",
+        "short_direct_sentences": "kalimat pendek dan langsung ke inti",
+        "short_punchy": "kalimat pendek dengan ritme cepat",
+        "warm_narrative": "kalimat mengalir hangat seperti bercerita",
+        "conversational": "kalimat santai seperti ngobrol",
+    },
+    "hook_style": {
+        "clear_value": "hook berupa janji nilai yang jelas",
+        "bold_claim": "hook berupa klaim mencolok",
+        "fact_or_question": "hook berupa fakta atau pertanyaan",
+        "emotional_question": "hook berupa pertanyaan emosional",
+        "relatable_problem": "hook berupa masalah yang terasa dekat",
+    },
+    "cta_style": {
+        "direct_cta": "cta berupa perintah singkat",
+        "community_prompt": "cta mengajak bergabung atau ikut berdiskusi",
+        "polite_invitation": "cta berupa undangan dengan sopan",
+        "soft_direct_cta": "cta lembut tapi tetap jelas",
+    },
+    "emoji_level": {
+        "none": "tanpa emoji",
+        "low": "pakai maksimal satu emoji",
+        "medium": "pakai maksimal tiga emoji",
+        "high": "boleh banyak emoji",
+    },
+}
+
 
 def _candidate_models():
     preferred = os.getenv("OPENROUTER_MODEL")
@@ -99,13 +133,51 @@ def _clean_source_url(raw):
     return url if url.startswith(("http://", "https://")) else ""
 
 
+def voice_block(account, brand=None):
+    """Blok arahan gaya tulis untuk prompt.
+
+    Nilainya berasal dari `generation_style` di Brand Profile, dengan Nilai
+    opsional dari `accounts.json` sebagai penimpa. Warna dan layout tidak ikut
+    ke sini: prompt hanya mengatur tulisan, tampilan dibaca renderer dari config.
+    """
+    style = dict(brand.get("generation_style") or {}) if brand else {}
+    style.update(account.get("generation_style") or {})
+
+    lines = []
+    if style.get("tone"):
+        lines.append(f"- Nada bicara: {style['tone']}")
+    for key in ("sentence_style", "hook_style", "cta_style", "emoji_level"):
+        value = style.get(key)
+        if not value:
+            continue
+        guide = VOICE_GUIDE.get(key, {}).get(value)
+        lines.append(f"- {guide or value}")
+    if style.get("vocabulary"):
+        lines.append(f"- Istilah yang lazim dipakai: {style['vocabulary']}")
+    return "\n".join(lines) or "- Nada bicara: santai dan ramah"
+
+
+def _resolve_brand(account, brand=None):
+    """Brand Profile milik akun, dibaca dari config bila tidak diberikan."""
+    if brand:
+        return brand
+    try:
+        from branding import loader
+
+        return loader.brand_for(account or {})
+    except Exception:
+        return {}
+
+
 def build_prompt(request, topics, account, category=None, max_points=MAX_FRAMES,
-                 avoid_topics=None, angle_hint=""):
+                 avoid_topics=None, angle_hint="", brand=None):
     """Menyusun prompt per akun.
 
     fact_check_rules ikut dimasukkan sebagai aturan wajib supaya MLBB dan catur
-    tidak menghasilkan angka atau hasil pertandingan karangan.
+    tidak menghasilkan angka atau hasil pertandingan karangan. Gaya tulis dari
+    Brand Profile ikut dimasukkan sebagai arahan, bukan sebagai data.
     """
+    account = account or {}
     rules = account.get("fact_check_rules") or []
     avoid = account.get("avoid") or []
     combined = list(dict.fromkeys([*avoid, *rules])) or ["jangan mengarang fakta"]
@@ -121,6 +193,7 @@ def build_prompt(request, topics, account, category=None, max_points=MAX_FRAMES,
         niche=account.get("niche", "umum"),
         audience=account.get("audience", "pengguna media sosial Indonesia"),
         tone=account.get("tone", "santai dan ramah"),
+        voice=voice_block(account, brand or _resolve_brand(account, brand)),
         request=request,
         topics="\n".join(f"- {t}" for t in topics) or "- (belum ada topik, gunakan pengetahuan umum)",
         category=category or "umum",
@@ -216,7 +289,7 @@ def normalize_payload(raw, account):
 
 
 def generate_content(request, topics, account, category=None, avoid_topics=None,
-                      angle_hint=""):
+                      angle_hint="", brand=None):
     """Menghasilkan caption + teks visual terstruktur untuk satu akun."""
     api_key = os.getenv("OPENROUTER_API_KEY")
     if not api_key:
@@ -224,7 +297,7 @@ def generate_content(request, topics, account, category=None, avoid_topics=None,
 
     prompt = build_prompt(
         request, topics, account, category=category,
-        avoid_topics=avoid_topics, angle_hint=angle_hint,
+        avoid_topics=avoid_topics, angle_hint=angle_hint, brand=brand,
     )
     headers = {
         "Authorization": f"Bearer {api_key}",

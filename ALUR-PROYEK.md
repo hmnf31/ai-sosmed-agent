@@ -120,7 +120,7 @@ Intent punya dua kunci tambahan untuk task operasional:
 
 ---
 
-## 4. Akun: Schema v2
+## 4. Akun: Schema v3
 
 `accounts.json` mendefinisikan tiap akun:
 
@@ -129,6 +129,7 @@ Intent punya dua kunci tambahan untuk task operasional:
   "id": "wedding",
   "label": "Wedding Organizer",
   "handle": "@wedding.ko",
+  "brand_profile": "wedding",
   "emoji": "💍",
   "mode": ["content"],
   "niche": "organizer pernikahan dan dekorasi pesta di Indonesia",
@@ -144,7 +145,11 @@ Intent punya dua kunci tambahan untuk task operasional:
 }
 ```
 
-Field baru `mode` membedakan cara kerja sebuah akun:
+Field `brand_profile` menautkan akun ke folder `branding/<nama>/`. Kosong berarti
+pakai id akun sendiri. `generation_style` boleh diisi di sini untuk menimpa
+gaya tulis yang default-nya ada di `brand.json`.
+
+Field `mode` membedakan cara kerja sebuah akun:
 
 | Mode | Akun | Arti |
 | --- | --- | --- |
@@ -155,6 +160,10 @@ Field baru `mode` membedakan cara kerja sebuah akun:
 `fact_check_rules` dikirim ke prompt sebagai aturan wajib, terpisah dari
 `avoid` yang bersifat perilaku umum.
 
+`generation_style` (`tone`, `sentence_style`, `hook_style`, `cta_style`,
+`emoji_level`, `vocabulary`) diterjemahkan jadi arahan bahasa Indonesia lalu
+ikut ke prompt. Warna dan layout tidak masuk ke prompt karena bukan urusan model.
+
 Empat akun dikonfigurasi: `chess`, `wedding`, `mlbb`, `fashion`.
 `accounts_mod.has_mode()` dipakai bot untuk memilih jalur: akun
 `club_operations` memakai spreadsheet, akun `content` memakai riset tren.
@@ -162,9 +171,10 @@ Empat akun dikonfigurasi: `chess`, `wedding`, `mlbb`, `fashion`.
 `accounts.json` ada di `.gitignore`. File `accounts.example.json` yang
 di-commit berisi template dengan isi yang sama.
 
-Field baru bersifat opsional: file schema v1 tanpa `mode`, `fact_check_rules`,
-atau `content_categories` tetap bisa dibaca. `utils/accounts.py` mengisi nilai
-default supaya pemanggil tidak perlu memeriksa keberadaan kunci.
+Field baru bersifat opsional: file schema lama tanpa `mode`, `brand_profile`,
+`fact_check_rules`, atau `content_categories` tetap bisa dibaca.
+`utils/accounts.py` mengisi nilai default supaya pemanggil tidak perlu
+memeriksa keberadaan kunci.
 
 ---
 
@@ -272,14 +282,29 @@ gratis berikutnya. Raise exception kalau semua gagal.
 
 ## 9. Render Media
 
+Semua tampilan sekarang melewati satu mesin: `utils/media/`. Renderer lama hanya
+menjadi pintu masuk supaya pemanggil lama tidak berubah.
+
+| Modul | Tugas |
+| --- | --- |
+| `layout_engine.py` | kanvas, palet, latar, panel, teks, penanda poin |
+| `template_engine.py` | menyusun kartu dan tiga frame dari Brand Profile |
+| `watermark_engine.py` | memilih varian, menempelkan watermark, mengaudit posisinya |
+| `asset_loader.py` | memetakan akun ke format kanvas dan aset branding |
+
+Satu alur berlaku untuk semua akun: pilih template, pilih kanvas, gambar isi,
+tempelkan watermark, lalu QA. Warna, tipografi, bentuk panel, dan penanda poin
+semuanya dibaca dari `branding/<akun>/brand.json` dan `styles/<preset>.json`.
+Rinciannya ada di `branding/README.md`.
+
 **Video** (`utils/video_maker.py`) adalah jalur default.
 
 Tiga frame vertikal 1080x1920 dirender dengan Pillow:
 
 | Frame | Isi |
 | --- | --- |
-| 1 | Label "TREN TERKINI", judul besar, subtitle, tanggal |
-| 2 | "POIN PENTING" + 4 poin bernomor |
+| 1 | Label "HOOK", judul besar, subtitle |
+| 2 | "POIN PENTING" + poin bernomor sesuai ruang yang tersedia |
 | 3 | "GILIRANMU" + ajakan bertindak + handle akun |
 
 Lalu ffmpeg menggabungkannya dengan `zoompan` halus, `fade` di awal dan akhir
@@ -290,10 +315,22 @@ Parameter ini memenuhi syarat unggah TikTok: minimum 23 fps (dipakai 25),
 ukuran minimum 360 piklus kedua sisi (dipakai 1080), H.264, yuv420p.
 
 **Gambar** (`utils/image_maker.py`) untuk permintaan yang menyebut "gambar",
-"foto", atau "ig". Kartu 1080x1080 dengan judul, subtitle, 3 poin, dan CTA.
+"foto", atau "ig". Kartu 1080x1080 dengan judul, subtitle, poin, dan CTA.
+Format `portrait` 1080x1350 tersedia lewat `/preview <akun> portrait`.
 
 Format dipilih dari `intent["format"]`, lalu default `DEFAULT_CONTENT_FORMAT`.
 Batas Telegram 50 MB per video dicek sebelum kirim.
+
+Watermark menempel otomatis di semua hasil render. Varian `on_light` atau
+`on_dark` dipilih dari kecerahan latar, ukuran mengikuti skala relatif terhadap
+lebar kanvas, dan posisinya dijaga tetap di dalam kanvas.
+
+Perintah bantu untuk memeriksa tampilan tanpa memakai kuota AI:
+
+```
+/preview [akun] [image|video|portrait]   contoh render sesuai brand akun
+/style [akun]                           ringkasan warna, template, watermark
+```
 
 ---
 
@@ -366,14 +403,45 @@ Akun `chess` punya `mode: ["content", "club_operations"]`. Mode
 `club_operations` membuat TCO dan Liga memakai data spreadsheet, bukan riset
 tren. Angka tidak pernah datang dari model.
 
-`utils/chess/spreadsheet.py` membaca dari tiga sumber, urut dari yang paling
-diprioritaskan:
+`utils/chess/spreadsheet.py` membaca dari beberapa sumber, urut dari yang paling
+diprioritaskan. Setiap sumber hanya dipakai kalau benar-benar punya data untuk
+range itu:
 
 | Prioritas | Sumber | Cara |
 | --- | --- | --- |
 | 1 | Google Sheets REST API | `SHEET_CREDENTIALS_JSON` berisi JSON service account |
-| 2 | CSV lokal | `SHEET_CSV_PATH` |
-| 3 | File .xlsx lokal | `SHEET_XLSX_PATH` |
+| 2 | Google Sheets publik | `SHEET_PUBLIC_ID`, tanpa kredensial |
+| 3 | CSV lokal | `SHEET_CSV_PATH` |
+| 4 | File .xlsx lokal | `SHEET_XLSX_PATH` |
+
+Sumber publik dibaca lewat endpoint export `.xlsx` milik Google, bukan lewat
+API yang butuh token. Syaratnya satu: sheet dibagikan sebagai "Siapa saja
+dengan link". Nilinya boleh ID polos maupun URL penuh, karena ID diambil dari
+bagian URL. Workbook diunduh satu kali lalu disimpan 5 menit, jadi satu siklus
+bot tidak mengunduhnya berulang.
+
+Sheet publik yang dipakai TCO punya tab `Players`, `SUMMARY`, `SEASON`,
+`Standings`, `Schedules`, dan `Results`. Modul membaca tab `Standings` untuk
+klasemen, karena itu isinya memang klasemen. Nama tab alternatif diterima lewat
+`TAB_ALIASES`: `Liga` juga berarti `Standings`, dan `TCO` juga berarti
+`Jadwal`.
+
+Dua lapisnormalisasi nama kolom dibutuhkan untuk data sheet publik:
+
+1. `_row_mapping()` mencocokkan dua tahap. Tahap pertama hanya cocok persis,
+   tahap kedua baru cocok sebagian. Urutannya penting: kolom `player_id` cocok
+   sebagian dengan alias `player`, dan kalau ituambil duluan, kolom `name`
+   berikutnya tidak lagi dikenali sebagai nama pemain.
+2. `EXACT_HEADER_ALIASES` memetakan kolom satu huruf (`mp`, `w`, `d`, `l`)
+   hanya kalau cocok persis. Tanpa aturan ini, `wo_count` akan terbaca
+   sebagai kolom menang karena diawali huruf `w`.
+
+Angka desimal dipangkas ke bagian bulatnya. Sheet publik menyimpan poin
+sebagai `4.0`, dan nilainya harus jadi 4, bukan 40.
+
+Karena sumber dibaca berurutan per range, sheet publik bisa melayani klasemen
+s sementara jadwal TCO tetap diambil dari `club-data.xlsx` lokal. Keduanya
+tidak saling menimpa, dan tidak ada sumber yang dipakai walau isinya kosong.
 
 Template .xlsx dibuat sekali dengan:
 
@@ -542,6 +610,10 @@ terlihat dari log tanpa perlu mengukur sendiri.
 bot.py                       entry point bot
 accounts.json                akun yang dikelola (tidak di-commit)
 accounts.example.json        template akun (di-commit)
+branding/<akun>/brand.json   identitas visual satu akun
+branding/README.md           cara mengubah tampilan per akun
+styles/<preset>.json         kanvas, tipografi, dan jarak
+templates/registry.json      katalog template per akun dan kategori
 utils/
   telegram_bot.py            polling, orkestrasi, tombol, logging
   router.py                  chat bebas -> intent terstruktur
@@ -549,6 +621,7 @@ utils/
   history.py                 histori konten, dedup, request log
   keyboards.py               tombol inline dan teks permintaan
   engines/                   aturan khusus per akun
+  media/                     kanvas, layout, template, watermark
   chess/
     spreadsheet.py           baca Google Sheets, CSV, atau XLSX
     webtco.py                baca klasemen, jadwal, dan hasil dari situs TCO
@@ -557,13 +630,14 @@ utils/
     arena.py                 template tetap Arena Kings plus 3 tahap pengingat
   scraper.py                 riset tren via Playwright
   content_generator.py       caption + teks visual dari OpenRouter
-  image_maker.py             render frame dan kartu
+  image_maker.py             pintu masuk render kartu
   video_maker.py             komposisi video via ffmpeg
   notifier.py                kirim pesan, tombol, dan media
   tiktok.py                  Content Posting API (tidak dipakai alur ini)
   instagram.py               Meta Graph API (tidak dipakai alur ini)
   ai_generator.py            generator caption lama (dipakai main.py)
 scripts/
+  build_branding_assets.py   buat logo dan watermark dari brand.json
   make_sheet_template.py     buat club-data-template.xlsx sekali saja
   check_sheet_data.py        cek sumber data tanpa menjalankan bot
 club-data-template.xlsx      template spreadsheet yang bisa di-commit
@@ -611,6 +685,11 @@ Opsional:
 | `SHEET_CREDENTIALS_JSON` | kosong | JSON service account Google Sheets |
 | `SHEET_CSV_PATH` | kosong | CSV lokal, dipakai sebelum XLSX |
 | `SHEET_XLSX_PATH` | kosong | File .xlsx lokal |
+| `BRANDING_DIR` | `branding` | Folder Brand Profile per akun |
+| `STYLES_DIR` | `styles` | Folder style preset visual |
+| `TEMPLATE_REGISTRY_PATH` | `templates/registry.json` | Katalog template |
+| `BRANDING_ASSETS_DIR` | `assets/branding` | Hasil build logo dan watermark |
+| `CONTENT_OUTPUT_DIR` | `output` | Folder kartu, frame, dan video |
 
 Bot berhenti sendiri kalau `TELEGRAM_CHAT_ID` kosong atau `accounts.json`
 tidak terbaca, dan alasannya dicatat di log.
@@ -641,6 +720,10 @@ form, dan kontak.
 # isi club-data-template.xlsx, salin jadi club-data.xlsx, lalu set
 # SHEET_XLSX_PATH=club-data.xlsx di .env
 .venv\Scripts\python.exe scripts\check_sheet_data.py
+
+# sekali saja, setiap kali brand.json berubah
+.venv\Scripts\python.exe scripts\build_branding_assets.py --check
+.venv\Scripts\python.exe scripts\build_branding_assets.py
 
 # setiap kali dipakai
 .venv\Scripts\python.exe bot.py
@@ -674,10 +757,16 @@ arena kings bulan ini 2 jam lagi
 
 # Umum
 /riwayat mlbb
+/preview mlbb image
+/style wedding
 /menu
 /akun
 /status
 ```
+
+`/preview` mengirim contoh render memakai isi contoh, bukan hasil AI, sehingga
+tampilan bisa diperiksa tanpa memakai kuota. `/style` menampilkan ringkasan
+warna, template, dan watermark satu akun.
 
 `/menu` membuka tombol, sehingga sebagian besar perintah tidak perlu diketik.
 Menu akun `chess` punya tombol `⏱ Pengingat Arena` yang membuka submenu tahap:

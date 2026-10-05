@@ -46,6 +46,16 @@ BACK_PREFIX = "menu:back"
 ACCOUNT_PREFIX = "menu:account:"
 TASK_PREFIX = "menu:task:"
 HISTORY_PREFIX = "menu:history:"
+PREVIEW_PREFIX = "menu:preview:"
+STYLE_PREFIX = "menu:style:"
+
+#: Format yang bisa dipilih lewat tombol preview. Nilai ini diteruskan ke
+#: perintah `/preview`, jadi renderer tetap punya satu jalur.
+PREVIEW_FORMATS = (
+    ("🖼️ Kartu", "image"),
+    ("🎬 Video", "video"),
+    ("📐 Portrait", "portrait"),
+)
 
 # Tahap pengingat yang bisa dipilih lewat tombol. Nilainya disisipkan ke teks
 # permintaan; router tetap yang memastikan tahapnya dikenali.
@@ -113,9 +123,25 @@ def account_markup(account_id):
 
     rows.append([
         {"text": "🕘 Riwayat", "callback_data": f"{HISTORY_PREFIX}{account_id}"},
+        {"text": "🎨 Preview", "callback_data": f"{PREVIEW_PREFIX}{account_id}"},
+    ])
+    rows.append([
+        {"text": "🧩 Style", "callback_data": f"{STYLE_PREFIX}{account_id}"},
         {"text": "◀️ Menu utama", "callback_data": BACK_PREFIX},
     ])
     return _keyboard(rows)
+
+
+def preview_markup(account_id):
+    """Tombol format untuk preview brand satu akun."""
+    format_buttons = [
+        {"text": label, "callback_data": f"{PREVIEW_PREFIX}{account_id}:{fmt}"}
+        for label, fmt in PREVIEW_FORMATS
+    ]
+    return _keyboard([
+        format_buttons,
+        [{"text": "◀️ Kembali", "callback_data": f"{ACCOUNT_PREFIX}{account_id}"}],
+    ])
 
 
 def home_text():
@@ -127,7 +153,7 @@ def home_text():
         lines.append(f"{emoji} {account['label']}")
     lines.append("")
     lines.append(f"Default: {default['label'] if default else '-'}")
-    lines.append("Ketik /bantu untuk daftar perintah teks.")
+    lines.append("Ketik /bantu untuk daftar perintah teks, /preview untuk contoh tampilan.")
     return "\n".join(lines)
 
 

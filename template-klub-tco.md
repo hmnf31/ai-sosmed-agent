@@ -109,11 +109,15 @@ lalu untuk pengingat H-14 hari sebelum kegiatan berlangsung dan H-7 hari sebelum
 # Internal Mingguan TCO
 
 - Untuk mingguan template menyesuaikan data dari Judul , mode, tanggal , link dll nya.
-untuk pengingat setiap H-2 dan H-1 sebelum kegiatan berlangsung
+untuk pengingat setiap H-2 dan H-1 sebelum kegiatan berlangsung 
+- 
 
 
 # TCO Liga 
 - untuk TCO Liga ini kamu buka situs resmi Klub TCO nya di link ini : https://web-tco.vercel.app/liga
 saya disana ada fitur untuk export csv di setiap liga dan setiap sesi ada sesi standings, coming up, result di setiap liga nya ada 4 liga .
 - lalu jika untuk data spreadsheet lengkap ada di link ini https://docs.google.com/spreadsheets/d/11Q3AIGofm1ZQeRomJOoEEy6YacZz_EHNsJUN-3DzYQU/edit?usp=sharing , saya selalu update data hasil setiap minggu/setiap ronde nya kamu bisa sesuaikan dengan data disini
+
+
+jadi untuk alur chess itu untuk arena mungkin tidak perlu sheet hanya pengingat dan generator pesan untuk di share saja , lalu untuk liga ke yang sudah ada , nah untuk tco internal mingguan 1 spreadsheet baru khusus untuk turnamen mingguan nya begitulah kira kira alur nya
 

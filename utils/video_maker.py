@@ -1,17 +1,24 @@
 import os
 import shutil
 import subprocess
+from datetime import datetime, timedelta, timezone
 
 from utils.image_maker import VIDEO_WIDTH, VIDEO_HEIGHT, render_content_video_frames, render_video_frames
+from utils.media import layout_engine
 
 FPS = 25
 SEGMENT_SECONDS = 4
+WIB = timezone(timedelta(hours=7))
 FFMPEG_CANDIDATES = [
     os.getenv("FFMPEG_PATH"),
     "ffmpeg",
     r"C:\Users\Administrator\AppData\Local\Microsoft\WinGet\Links\ffmpeg.exe",
 ]
 OUTPUT_DIR = "output"
+
+
+def _out_dir():
+    return layout_engine.output_dir() or OUTPUT_DIR
 
 
 def _find_ffmpeg():
@@ -67,12 +74,27 @@ def _cleanup(frames):
             pass
 
 
-def render_content_video(content, output_path=None, footer="AI Sosmed Agent"):
-    """Menggabungkan frame konten AI menjadi video mp4 vertikal untuk unggah manual."""
-    frames = render_content_video_frames(content, output_dir=OUTPUT_DIR, footer=footer)
+def render_content_video(content, output_path=None, footer="AI Sosmed Agent",
+                         brand=None, account=None, category=None):
+    """Menggabungkan frame brand-aware menjadi video mp4 vertikal.
+
+    Frame dibuat oleh `utils.media.template_engine` supaya video mendapat warna,
+    template, dan watermark yang sama persis dengan kartu.
+    """
+    from branding import loader
+    from utils.media import template_engine
+
+    result = template_engine.render_frames(
+        content, loader.resolve_brand(account, brand), output_dir=_out_dir(),
+        category=category,
+    )
+    frames = result["paths"]
+    for problem in result["problems"]:
+        print(f"[BRAND] {problem}")
+
     if output_path is None:
-        stamp = frames[0].split("frame-1-")[1].rsplit(".", 1)[0]
-        output_path = os.path.join(OUTPUT_DIR, f"konten-{stamp}.mp4")
+        stamp = datetime.now(WIB).strftime("%Y%m%d-%H%M%S")
+        output_path = os.path.join(_out_dir(), f"konten-{stamp}.mp4")
     os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
 
     _compose(frames, output_path)
@@ -85,11 +107,11 @@ def render_content_video(content, output_path=None, footer="AI Sosmed Agent"):
 
 def render_trend_video(trends, output_path=None, footer="AI Sosmed Agent"):
     """Menggabungkan frame vertikal menjadi video mp4 (h264 + audio) untuk TikTok/Reels."""
-    frames = render_video_frames(trends, footer=footer, output_dir=OUTPUT_DIR)
+    frames = render_video_frames(trends, footer=footer, output_dir=_out_dir())
 
     if output_path is None:
         stamp = frames[0].split("frame-1-")[1].rsplit(".", 1)[0]
-        output_path = os.path.join(OUTPUT_DIR, f"tren-{stamp}.mp4")
+        output_path = os.path.join(_out_dir(), f"tren-{stamp}.mp4")
     os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
 
     _compose(frames, output_path)

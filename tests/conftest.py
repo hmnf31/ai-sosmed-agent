@@ -79,7 +79,7 @@ def fake_pipeline(monkeypatch):
         return [f"{request} (tren)"]
 
     def _content(request, topics, account, category=None, avoid_topics=None,
-                 angle_hint=""):
+                 angle_hint="", brand=None):
         calls["ai"].append({
             "request": request,
             "topics": tuple(topics),
@@ -87,6 +87,7 @@ def fake_pipeline(monkeypatch):
             "category": category,
             "avoid_topics": tuple(avoid_topics or ()),
             "angle_hint": angle_hint,
+            "brand_account": (brand or {}).get("account"),
         })
         return {
             "title": f"Judul {request}",
@@ -99,12 +100,14 @@ def fake_pipeline(monkeypatch):
             "source_url": "",
         }
 
-    def _image(content, footer=""):
-        calls["render"].append(("image", content.get("title"), footer))
+    def _image(content, footer="", brand=None, account=None, category=None):
+        calls["render"].append(("image", content.get("title"), footer, category,
+                                (brand or {}).get("account")))
         return "output/test-image.png"
 
-    def _video(content, footer=""):
-        calls["render"].append(("video", content.get("title"), footer))
+    def _video(content, footer="", brand=None, account=None, category=None):
+        calls["render"].append(("video", content.get("title"), footer, category,
+                                (brand or {}).get("account")))
         return "output/test-video.mp4"
 
     monkeypatch.setattr(telegram_bot, "_collect_topics", _topics)

@@ -1,0 +1,70 @@
+{
+  "schema_version": "1.0",
+  "account": "chess",
+  "label": "Klub Catur / TCO",
+  "handle": "@tco.chess",
+  "mark": "pawn",
+  "monogram": "TCO",
+  "style_preset": "chess_club",
+  "identity": {
+    "style": "chess_club_competitive_sport",
+    "visual_mood": ["komunitas", "sporty", "kompetitif", "profesional", "ramah"],
+    "design_density": "medium",
+    "image_style": "premium_sport"
+  },
+  "colors": {
+    "background": "#12294A",
+    "background_alt": "#2C5A8E",
+    "surface": "#1B3A63",
+    "primary": "#2C5A8E",
+    "secondary": "#E3B341",
+    "accent": "#FFC94D",
+    "text": "#FFFFFF",
+    "muted": "#C0D4EA",
+    "on_primary": "#0E1F38"
+  },
+  "typography": {
+    "heading_font": "bold",
+    "body_font": "regular",
+    "label_font": "bold"
+  },
+  "generation_style": {
+    "tone": "komunitas, informatif, sportif, praktis",
+    "sentence_style": "short_direct_sentences",
+    "hook_style": "fact_or_question",
+    "cta_style": "community_prompt",
+    "emoji_level": "low",
+    "vocabulary": "catur, klub, liga, Caro-Khan, TCO"
+  },
+  "watermark": {
+    "type": "logo_plus_handle",
+    "variants": {
+      "primary": {"plate": "#FFC94D", "logo": "#0E1F38", "text": "#0E1F38"},
+      "on_light": {"plate": null, "logo": "#1B3A63", "text": "#12294A"},
+      "on_dark": {"plate": null, "logo": "#FFC94D", "text": "#FFFFFF"}
+    },
+    "position": "bottom_right",
+    "opacity": 0.85,
+    "scale": 0.12,
+    "margin": 56,
+    "safe_area": true
+  },
+  "templates": {
+    "square": [
+      "chess_tco_announcement",
+      "chess_tco_reminder",
+      "chess_liga_standings",
+      "chess_liga_news",
+      "chess_arena_announcement",
+      "chess_arena_reminder",
+      "chess_tip",
+      "chess_puzzle",
+      "chess_match_recap",
+      "chess_community"
+    ],
+    "portrait": ["chess_tco_announcement", "chess_liga_standings", "chess_tip"],
+    "reel": ["chess_tco_announcement", "chess_match_recap", "chess_tip"],
+    "story": ["chess_arena_reminder", "chess_tco_reminder"]
+  },
+  "default_template": "chess_tip"
+}

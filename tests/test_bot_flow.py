@@ -60,6 +60,71 @@ def test_duplicate_does_not_block_creation(fake_notifier, fake_pipeline, db_path
     assert len(history.recent("mlbb", path=db_path)) == 2
 
 
+def test_brand_dikirim_ke_ai_dan_renderer(fake_notifier, fake_pipeline, db_path):
+    """Satu akun = satu brand, dari prompt sampai gambar."""
+    from utils import telegram_bot
+
+    telegram_bot.handle_message("123", "buatkan konten mlbb counter hayabusa")
+    assert fake_pipeline["ai"][0]["brand_account"] == "mlbb"
+    assert fake_pipeline["render"][0][4] == "mlbb"
+
+
+def test_template_dipilih_sesuai_kategori(fake_notifier, fake_pipeline, db_path):
+    from utils import telegram_bot
+
+    telegram_bot.handle_message("123", "buatkan konten mlbb counter hayabusa")
+    template = fake_pipeline["render"][0][3]
+    assert template == "counter"
+
+
+def test_pesan_menyebut_template_dan_catatan_branding(fake_notifier, fake_pipeline,
+                                                        db_path):
+    from utils import telegram_bot
+
+    telegram_bot.handle_message("123", "buatkan 1 konten tren wedding")
+    teks = "\n".join(m["text"] for m in fake_notifier["sent"])
+    assert "Template: wedding_trend" in teks
+
+
+def test_perintah_style_menampilkan_ringkasan_brand(fake_notifier):
+    from utils import telegram_bot
+
+    telegram_bot.handle_message("123", "/style mlbb")
+    teks = fake_notifier["sent"][-1]["text"]
+    assert "Brand" in teks and "mlbb" in teks
+    assert "Watermark:" in teks
+    assert "SINTETIS" not in teks
+
+
+def test_perintah_preview_mengirim_media(fake_notifier, tmp_path, monkeypatch):
+    from utils import telegram_bot
+    from utils.media import layout_engine
+
+    monkeypatch.setenv("CONTENT_OUTPUT_DIR", str(tmp_path))
+    telegram_bot.handle_message("123", "/preview wedding image")
+    assert fake_notifier["media"], "preview harus mengirim media"
+    caption = fake_notifier["media"][-1]["caption"]
+    assert "Template:" in caption
+    assert "watermark:" in caption
+    assert layout_engine.media_size_ok(fake_notifier["media"][-1]["path"], "square")[0]
+
+
+def test_tombol_preview_membuka_pilihan_format(fake_notifier):
+    from utils import telegram_bot
+
+    telegram_bot.handle_callback("123", 5, "cb", "menu:preview:chess")
+    edit = fake_notifier["edited"][-1]
+    data = [b["callback_data"] for row in edit["reply_markup"]["inline_keyboard"] for b in row]
+    assert "menu:preview:chess:portrait" in data
+
+
+def test_tombol_style_menampilkan_ringkasan(fake_notifier):
+    from utils import telegram_bot
+
+    telegram_bot.handle_callback("123", 5, "cb", "menu:style:fashion")
+    assert "Fashion" in fake_notifier["sent"][-1]["text"]
+
+
 def test_greeting_gets_guide_with_buttons(fake_notifier, fake_pipeline, db_path):
     from utils import telegram_bot
 

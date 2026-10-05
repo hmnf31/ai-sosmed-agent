@@ -1,0 +1,51 @@
+{
+  "schema_version": "1.0",
+  "id": "wedding_elegant",
+  "account": "wedding",
+  "canvas": {
+    "background": "gradient_vertical",
+    "accent_bar": "thin",
+    "panel": "soft",
+    "rule": "hairline",
+    "texture": "none"
+  },
+  "typography": {
+    "heading": "bold",
+    "heading_scale": 0.072,
+    "heading_line_spacing": 1.16,
+    "heading_max_lines": 4,
+    "body": "regular",
+    "body_scale": 0.033,
+    "body_line_spacing": 1.42,
+    "body_max_lines": 2,
+    "label": "bold",
+    "label_scale": 0.028,
+    "label_caps": true,
+    "cta_scale": 0.040
+  },
+  "spacing": {
+    "margin": 0.086,
+    "gap": 0.030,
+    "corner_radius": 26,
+    "panel_padding": 0.038
+  },
+  "shadow": {
+    "enabled": true,
+    "opacity": 0.18,
+    "offset": 5,
+    "blur": 18
+  },
+  "overlay": {
+    "scrim": 0.0,
+    "vignette": 0.0
+  },
+  "icon_style": "line",
+  "point_marker": "dash",
+  "watermark": {
+    "position": "bottom_right",
+    "opacity": 0.82,
+    "scale": 0.13,
+    "margin": 56,
+    "safe_area": true
+  }
+}

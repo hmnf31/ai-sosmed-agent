@@ -1,0 +1,59 @@
+{
+  "schema_version": "1.0",
+  "account": "mlbb",
+  "label": "Esports MLBB",
+  "handle": "@mlbb.indo",
+  "mark": "bolt",
+  "monogram": "ML",
+  "style_preset": "mlbb_esports",
+  "identity": {
+    "style": "gaming_esports_high_contrast",
+    "visual_mood": ["energik", "cepat", "gaming", "esports", "tegas"],
+    "design_density": "high",
+    "image_style": "esports_arena"
+  },
+  "colors": {
+    "background": "#0A0E17",
+    "background_alt": "#182140",
+    "surface": "#151B2E",
+    "primary": "#00B8D4",
+    "secondary": "#FF2D6F",
+    "accent": "#00E5FF",
+    "text": "#F2F7FF",
+    "muted": "#9AA7BD",
+    "on_primary": "#04121A"
+  },
+  "typography": {
+    "heading_font": "bold",
+    "body_font": "regular",
+    "label_font": "bold"
+  },
+  "generation_style": {
+    "tone": "energetik, teknis, percaya diri",
+    "sentence_style": "short_punchy",
+    "hook_style": "bold_claim",
+    "cta_style": "community_prompt",
+    "emoji_level": "medium",
+    "vocabulary": "rank, meta, build, hero, MPL, ban-pick"
+  },
+  "watermark": {
+    "type": "logo_plus_handle",
+    "variants": {
+      "primary": {"plate": "#00E5FF", "logo": "#04121A", "text": "#04121A"},
+      "on_light": {"plate": null, "logo": "#0A0E17", "text": "#0A0E17"},
+      "on_dark": {"plate": null, "logo": "#00E5FF", "text": "#F2F7FF"}
+    },
+    "position": "top_right",
+    "opacity": 0.9,
+    "scale": 0.14,
+    "margin": 56,
+    "safe_area": true
+  },
+  "templates": {
+    "square": ["mlbb_patch", "mlbb_hero", "mlbb_counter", "mlbb_meta", "mlbb_esports"],
+    "portrait": ["mlbb_patch", "mlbb_hero", "mlbb_build", "mlbb_tip"],
+    "reel": ["mlbb_mpl", "mlbb_esports", "mlbb_match_analysis", "mlbb_tip"],
+    "story": ["mlbb_patch", "mlbb_mpl"]
+  },
+  "default_template": "mlbb_patch"
+}
