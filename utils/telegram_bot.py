@@ -35,6 +35,14 @@ Setelah media dikirim, unggah manual ke TikTok. Caption tinggal disalin."""
 
 MAX_TOPICS = int(os.getenv("CONTENT_MAX_TOPICS") or 3)
 
+# Permintaan kurang dari ini kata dianggap belum jelas dan tidak dikirim ke AI.
+MIN_REQUEST_WORDS = 2
+SHORT_REQUESTS = {
+    "ya", "iya", "ok", "oke", "okay", "sip", "siap", "makasih", "terima kasih", "thanks",
+    "tes", "tes cek", "test", "test bot", "halo", "hai", "hello", "hi", "bro", "bang",
+    "halo bot", "hai bot", "bot", "tren terbaru", "konten tren terbaru", "terbaru",
+}
+
 
 def _clean_text(text):
     return " ".join((text or "").split())
@@ -50,11 +58,7 @@ def _requested_format(text):
 
 
 def _resolve_request(text):
-    """Pisahkan perintah menjadi (akun, permintaan sisa).
-
-    Kata kerja dan kata umum dibuang supaya yang tersisa adalah topik yang
-    benar-benar diminta pengguna.
-    """
+    """Pisahkan perintah menjadi (akun, permintaan sisa, kata_kunci_niche)."""
     account, keyword = accounts_mod.match_account(text)
     request = _clean_text(text)
 
@@ -87,7 +91,7 @@ def _resolve_request(text):
         topic = _clean_text(keyword)
         request = f"{topic} {request}".strip() if request else topic
 
-    return account, (request or "tren terbaru")
+    return account, (request or "tren terbaru"), keyword
 
 
 def _collect_topics(account, request):
@@ -163,6 +167,15 @@ def _handle_command(chat_id, text):
     return False
 
 
+def _is_unclear(request, keyword):
+    """Pesan terlalu pendek atau cuma sapaan tidak layak jadi permintaan konten."""
+    if keyword:
+        return False
+    if len(request) < MIN_REQUEST_WORDS:
+        return True
+    return request.lower() in SHORT_REQUESTS
+
+
 def handle_message(chat_id, text):
     text = _clean_text(text)
     if not text:
@@ -172,9 +185,19 @@ def handle_message(chat_id, text):
         return
 
     try:
-        account, request = _resolve_request(text)
+        account, request, keyword = _resolve_request(text)
     except FileNotFoundError as e:
         send_chat_message(f"File akun belum ada: {e}", chat_id=chat_id)
+        return
+
+    if _is_unclear(request, keyword):
+        send_chat_message(
+            "Pesannya belum jelas. Sebutkan niche-nya, contoh:\n"
+            "buatkan 1 konten trend wedding\n"
+            "bikin konten mlbb\n\n"
+            "Ketik /bantu untuk panduan lengkap.",
+            chat_id=chat_id,
+        )
         return
 
     send_chat_message(
