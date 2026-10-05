@@ -55,7 +55,8 @@ def exchange_authorization_code(code, client_key=None, client_secret=None, redir
 
     response = requests.post(
         TOKEN_URL,
-        json={
+        headers={"Content-Type": "application/x-www-form-urlencoded;charset=UTF-8"},
+        data={
             "client_key": client_key,
             "client_secret": client_secret,
             "code": code,
@@ -78,7 +79,8 @@ def refresh_access_token(refresh_token=None):
 
     response = requests.post(
         TOKEN_URL,
-        json={
+        headers={"Content-Type": "application/x-www-form-urlencoded;charset=UTF-8"},
+        data={
             "client_key": client_key,
             "client_secret": client_secret,
             "refresh_token": refresh_token,
