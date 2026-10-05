@@ -44,6 +44,14 @@
         <label>Error dari TikTok</label>
         <input id="err" readonly>
       </div>
+      <div class="field">
+        <label>Semua parameter yang diterima (diagnostik)</label>
+        <textarea id="dump" rows="7" readonly></textarea>
+      </div>
+      <div class="field">
+        <label>URL lengkap halaman ini</label>
+        <input id="fullurl" readonly>
+      </div>
       <p>Tempelkan code di atas ke terminal saat menjalankan <code>python scripts\tiktok_oauth.py</code>, lalu simpan refresh token ke file <code>.env</code>.</p>
     </div>
   </div>
@@ -51,11 +59,23 @@
 <script>
   var params = new URLSearchParams(window.location.search);
   var code = params.get('code') || params.get('authorization_code');
+  var lines = [];
+  params.forEach(function (value, name) {
+    lines.push(name + ' (panjang ' + value.length + ')\n' + value);
+  });
+  var hash = window.location.hash ? window.location.hash.slice(1) : '';
+  if (hash) { lines.push('#FRAGMENT#\n' + hash); }
+  document.getElementById('dump').value = lines.length ? lines.join('\n\n') : '(tidak ada parameter sama sekali)';
+  document.getElementById('fullurl').value = window.location.href;
   if (code) {
     document.getElementById('empty').style.display = 'none';
     document.getElementById('result').style.display = 'block';
     document.getElementById('code').value = code;
     document.getElementById('state').value = params.get('state') || '';
+    if (code.length > 120) {
+      document.getElementById('empty').textContent = 'PERINGATAN: code berpanjang ' + code.length + ' karakter, itu bukan authorization code TikTok yang normal ( biasanya 40-60 karakter).';
+      document.getElementById('empty').style.display = 'block';
+    }
   }
   var err = params.get('error');
   if (err) {
