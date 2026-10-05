@@ -63,11 +63,11 @@ def _dedupe(items):
     return unique
 
 
-def _relevance(title):
-    """Skor sederhana: judul yang menyebut tim/p_event/edisi contoh naik ke atas."""
+def _relevance(title, keywords=()):
+    """Skor sederhana: judul yang menyebut kata kunci niche naik ke atas."""
     low = title.lower()
-    score = sum(1 for token in HIGH_SIGNAL if token in low) * 3
-    score += sum(1 for token in MLBB_KEYWORDS if token in low)
+    tokens = tuple(keywords) or MLBB_KEYWORDS + HIGH_SIGNAL
+    score = sum(1 for token in tokens if token in low)
     return score
 
 
@@ -120,9 +120,12 @@ def get_google_trends(geo="ID", max_results=3):
     return result
 
 
-def get_mlbb_trends(max_results=3, query=None):
-    """Mengambil topik panas MLBB dari video YouTube terbaru (mobile legends indonesia)."""
-    query = query or os.getenv("MLBB_YOUTUBE_QUERY") or "mobile legends indonesia"
+def get_topic_trends(query, keywords=(), seed_topics=(), max_results=3):
+    """Mengambil topik panas dari video YouTube terbaru untuk query bebas.
+
+    Dipakai semua niche: MLBB, wedding, kuliner, dan lainnya.
+    """
+    query = (query or "").strip() or "tren indonesia"
     url = YOUTUBE_SEARCH_URL.format(query=quote_plus(query))
     print(f"[SCRAPER] Membuka {url}...")
 
@@ -134,22 +137,35 @@ def get_mlbb_trends(max_results=3, query=None):
                 break
             print(f"[SCRAPER] Percobaan {attempt}: judul video tidak ditemukan, mencoba lagi.")
         except Exception as e:
-            print(f"[SCRAPER ERROR] Gagal mengambil tren MLBB dari YouTube: {e}")
+            print(f"[SCRAPER ERROR] Gagal mengambil tren dari YouTube: {e}")
         if attempt == 1:
             time.sleep(5)
 
     titles = [t for t in _dedupe(titles) if len(t) > 8]
-    titles.sort(key=_relevance, reverse=True)
+    titles.sort(key=lambda t: _relevance(t, keywords), reverse=True)
 
     if not titles:
-        seeds = os.getenv("MLBB_SEED_TOPICS")
-        seeds = [s.strip() for s in seeds.split(",")] if seeds else list(MLBB_DEFAULT_SEEDS)
-        titles = seeds
-        print("[SCRAPER] Fallback ke daftar topik seed MLBB.")
+        seeds = [s.strip() for s in seed_topics if s and s.strip()]
+        titles = seeds or [query.title()]
+        print("[SCRAPER] Fallback ke daftar topik seed.")
 
     result = titles[:max_results]
-    print(f"[SCRAPER] Topik MLBB: {result}")
+    print(f"[SCRAPER] Topik: {result}")
     return result
+
+
+def get_mlbb_trends(max_results=3, query=None):
+    """Topik panas MLBB dari video YouTube terbaru."""
+    return get_topic_trends(
+        query or os.getenv("MLBB_YOUTUBE_QUERY") or "mobile legends indonesia",
+        keywords=MLBB_KEYWORDS + HIGH_SIGNAL,
+        seed_topics=[
+            s.strip()
+            for s in (os.getenv("MLBB_SEED_TOPICS") or ",".join(MLBB_DEFAULT_SEEDS)).split(",")
+            if s.strip()
+        ],
+        max_results=max_results,
+    )
 
 
 def get_trends(niche="general", max_results=3):

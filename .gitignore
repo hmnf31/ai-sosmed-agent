@@ -23,3 +23,6 @@ Thumbs.db
 # Output lokal
 *.log
 output/
+
+# Konfigurasi akun lokal (accounts.example.json yang dipakai sebagai template)
+accounts.json

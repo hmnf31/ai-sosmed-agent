@@ -59,6 +59,125 @@ def _draw_paragraph(draw, lines, font, x, y, fill, line_spacing=1.35):
     return y
 
 
+def render_content_video_frames(content, output_dir=None, footer="AI Sosmed Agent"):
+    """Merender frame vertikal 1080x1920 dari konten hasil AI.
+
+    Frame 1 memuat judul, frame 2 daftar poin, frame 3 ajakan bertindak.
+    """
+    output_dir = output_dir or OUTPUT_DIR
+    os.makedirs(output_dir, exist_ok=True)
+    stamp = datetime.now(WIB).strftime("%Y%m%d-%H%M%S")
+
+    accent = (255, 196, 84)
+    white = (245, 247, 255)
+    muted = (188, 193, 220)
+
+    title = content.get("title") or "Konten Hari Ini"
+    subtitle = content.get("subtitle") or ""
+    points = [p for p in content.get("points", []) if p]
+    cta = content.get("cta") or "Komentari pendapatmu"
+
+    paths = []
+
+    image, draw = _gradient_background(VIDEO_WIDTH, VIDEO_HEIGHT)
+    draw.rounded_rectangle([96, 220, 192, 234], radius=7, fill=accent)
+    paths.append(
+        _save_frame(
+            image, draw,
+            [
+                ("bold", 36, "TREN TERKINI", accent, 0),
+                ("bold", 112, title.upper(), white, 110),
+                ("regular", 48, subtitle, muted, 80),
+                ("regular", 40, datetime.now(WIB).strftime("%d %B %Y, %H:%M WIB"), white, 0),
+            ],
+            os.path.join(output_dir, f"frame-1-{stamp}.png"), VIDEO_WIDTH, VIDEO_HEIGHT,
+        )
+    )
+
+    image, draw = _gradient_background(VIDEO_WIDTH, VIDEO_HEIGHT)
+    bullet_lines = "\n".join(f"{i + 1}. {p}" for i, p in enumerate(points[:4]))
+    paths.append(
+        _save_frame(
+            image, draw,
+            [
+                ("bold", 36, "POIN PENTING", accent, 0),
+                ("bold", 62, bullet_lines, white, 90),
+                ("regular", 44, "Detail lengkap ada di caption.", muted, 90),
+                ("bold", 36, footer, accent, 0),
+            ],
+            os.path.join(output_dir, f"frame-2-{stamp}.png"), VIDEO_WIDTH, VIDEO_HEIGHT,
+        )
+    )
+
+    image, draw = _gradient_background(VIDEO_WIDTH, VIDEO_HEIGHT)
+    paths.append(
+        _save_frame(
+            image, draw,
+            [
+                ("bold", 36, "GILIRANMU", accent, 0),
+                ("bold", 92, cta.upper(), white, 120),
+                ("regular", 46, "Tulis di komentar, jangan cuma点赞 diam-diam.", muted, 80),
+                ("bold", 40, "#" + footer.replace(" ", ""), accent, 140),
+            ],
+            os.path.join(output_dir, f"frame-3-{stamp}.png"), VIDEO_WIDTH, VIDEO_HEIGHT,
+        )
+    )
+
+    print(f"[IMAGE] {len(paths)} frame konten dibuat di {output_dir}")
+    return paths
+
+
+def render_content_image(content, output_path=None, footer="AI Sosmed Agent"):
+    """Merender kartu 1080x1080 dari konten hasil AI (untuk Instagram atau feed)."""
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    if output_path is None:
+        stamp = datetime.now(WIB).strftime("%Y%m%d-%H%M%S")
+        output_path = os.path.join(OUTPUT_DIR, f"konten-{stamp}.png")
+
+    title = content.get("title") or "Konten Hari Ini"
+    subtitle = content.get("subtitle") or ""
+    points = [p for p in content.get("points", []) if p]
+    cta = content.get("cta") or ""
+
+    image, draw = _gradient_background(WIDTH, HEIGHT)
+
+    margin = 90
+    accent = (255, 196, 84)
+    white = (245, 247, 255)
+    muted = (188, 193, 220)
+
+    draw.rounded_rectangle([margin, 120, margin + 96, 134], radius=7, fill=accent)
+    label_font = _load_font("bold", 34)
+    draw.text((margin, 74), "TREN TERKINI", font=label_font, fill=accent)
+
+    y = _draw_paragraph(
+        draw, _wrap(draw, title.upper(), _load_font("bold", 84), WIDTH - 2 * margin, 3),
+        _load_font("bold", 84), margin, 200, white, 1.2,
+    )
+    if subtitle:
+        sub_font = _load_font("regular", 40)
+        y = _draw_paragraph(draw, _wrap(draw, subtitle, sub_font, WIDTH - 2 * margin, 3),
+                            sub_font, margin, y + 26, muted, 1.35)
+
+    if points:
+        point_font = _load_font("regular", 38)
+        y += 40
+        for point in points[:3]:
+            y = _draw_paragraph(draw, _wrap(draw, f"- {point}", point_font, WIDTH - 2 * margin, 2),
+                                point_font, margin, y, white, 1.3)
+            y += 8
+
+    body_font = _load_font("regular", 36)
+    _draw_paragraph(draw, [datetime.now(WIB).strftime("%d %B %Y, %H:%M WIB")],
+                    body_font, margin, HEIGHT - 250, white, 1.4)
+    draw.line([(margin, HEIGHT - 200), (WIDTH - margin, HEIGHT - 200)], fill=(255, 255, 255), width=2)
+    _draw_paragraph(draw, [cta or footer], _load_font("bold", 34), margin, HEIGHT - 160, accent, 1.4)
+
+    image.save(output_path, "PNG")
+    print(f"[IMAGE] Kartu konten dibuat: {output_path}")
+    return output_path
+
+
 def render_trend_image(trends, output_path=None, footer="AI Sosmed Agent"):
     """Merender kartu 1080x1080 berisi tren utama, siap dikirim ke Telegram/Instagram."""
     trends = list(trends) or ["Tren Terkini"]

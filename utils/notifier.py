@@ -4,12 +4,69 @@ import requests
 API_URL = "https://api.telegram.org/bot{token}/{method}"
 
 
+def _token():
+    return os.getenv("TELEGRAM_BOT_TOKEN")
+
+
 def _credentials():
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     chat_id = os.getenv("TELEGRAM_CHAT_ID")
     if not token or not chat_id:
         return None, None
     return token, chat_id
+
+
+def get_updates(offset=None, timeout=30, allowed_updates=None):
+    """Mengambil antrean pesan masuk. Offset harus pakai update_id terakhir + 1."""
+    token = _token()
+    if not token:
+        print("[NOTIFIER] TELEGRAM_BOT_TOKEN tidak diset. Polling dilewati.")
+        return []
+
+    payload = {"timeout": timeout}
+    if offset is not None:
+        payload["offset"] = offset
+    if allowed_updates:
+        payload["allowed_updates"] = allowed_updates
+
+    try:
+        response = requests.post(
+            API_URL.format(token=token, method="getUpdates"), json=payload, timeout=timeout + 15
+        )
+    except requests.RequestException as e:
+        print(f"[NOTIFIER ERROR] Gagal mengambil update: {e}")
+        return []
+
+    if response.status_code != 200:
+        print(f"[NOTIFIER ERROR] getUpdates HTTP {response.status_code}: {response.text[:200]}")
+        return []
+
+    try:
+        return response.json().get("result", [])
+    except ValueError:
+        return []
+
+
+def send_chat_message(text, chat_id=None, parse_mode=None):
+    """Mengirim pesan ke chat tertentu. Default-nya ke TELEGRAM_CHAT_ID."""
+    token = _token()
+    target = chat_id or os.getenv("TELEGRAM_CHAT_ID")
+    if not token or not target:
+        print("[NOTIFIER] Token/Chat ID Telegram tidak diset. Pesan dilewati.")
+        return False
+
+    payload = {"chat_id": target, "text": text, "disable_web_page_preview": True}
+    if parse_mode:
+        payload["parse_mode"] = parse_mode
+
+    try:
+        response = requests.post(API_URL.format(token=token, method="sendMessage"), json=payload, timeout=30)
+        if response.status_code == 200:
+            return True
+        print(f"[NOTIFIER ERROR] sendMessage HTTP {response.status_code}: {response.text[:200]}")
+    except requests.RequestException as e:
+        print(f"[NOTIFIER ERROR] Gagal mengirim pesan: {e}")
+    return False
 
 
 def send_telegram_notification(message):
@@ -107,3 +164,17 @@ def send_telegram_video(video_path, caption=""):
         print(f"[NOTIFIER] Video {size_mb:.1f} MB melebihi batas 50 MB bot Telegram.")
         return False
     return _upload_media("sendVideo", "video", video_path, caption, mime="video/mp4", timeout=300)
+
+
+def send_telegram_media(media_path, caption="", chat_id=None):
+    """Mengirim foto atau video sesuai ekstensi file."""
+    if not os.path.exists(media_path):
+        print(f"[NOTIFIER] File tidak ditemukan: {media_path}")
+        return False
+
+    if chat_id:
+        os.environ["TELEGRAM_CHAT_ID"] = str(chat_id)
+
+    if media_path.lower().endswith(".mp4"):
+        return send_telegram_video(media_path, caption)
+    return send_telegram_photo(media_path, caption)

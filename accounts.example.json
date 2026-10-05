@@ -1,0 +1,112 @@
+{
+  "default_account": "wedding",
+  "accounts": [
+    {
+      "id": "wedding",
+      "label": "Wedding Organizer",
+      "handle": "@wedding.ko",
+      "niche": "organizer pernikahan dan dekorasi pesta di Indonesia",
+      "audience": "calon pengantin usia 25-40 di Indonesia yang sedang menyiapkan pernikahan",
+      "tone": "hangat, elegan, penuh detail praktis, tanpa jualan keras",
+      "keywords": [
+        "wedding", "pengantin", "bridal", "venue", "dekorasi", "undangan",
+        "rundown", "akad", "resepsi", "wedding day", "fotografer", "makeup", "catering"
+      ],
+      "source_query": "wedding indonesia",
+      "seed_topics": [
+        "Ide dekorasi panggung wedding modern",
+        "Rundown akad nikah dan resepsi",
+        "Budget preparation pernikahan untuk pasangan muda",
+        "Konsep tema wedding yang sedang tren"
+      ],
+      "hashtags": [
+        "#weddingindonesia", "#pengantin", "#weddingorganizer", "#idewedding",
+        "#dekorasiwedding", "#bridal", "#weddinginspiration", "#planningwedding"
+      ],
+      "avoid": [
+        "jangan mengarang harga paket",
+        "jangan menjanjikan tanggal atau lokasi acara yang tidak ada di topik"
+      ]
+    },
+    {
+      "id": "mlbb",
+      "label": "Esports MLBB",
+      "handle": "@mlbb.indo",
+      "niche": "Mobile Legends Bang Bang dan ekosistem esports Indonesia",
+      "audience": "pemain MLBB dan penonton esports Indonesia usia 16-28",
+      "tone": "energik, bahasa anak muda esports, sedikit humor",
+      "keywords": [
+        "mlbb", "mpl", "mobile legends", "evos", "rrq", "mplid", "esport", "hero", "rank"
+      ],
+      "source_query": "mobile legends indonesia",
+      "seed_topics": [
+        "MPL ID Season terbaru",
+        "RRQ vs EVOS",
+        "Draft dan meta hero MPL ID",
+        "Jadwal bracket MPL ID"
+      ],
+      "hashtags": [
+        "#MPLID", "#MLBB", "#MobileLegends", "#esportindonesia",
+        "#RRQ", "#EVOS", "#mplidseason"
+      ],
+      "avoid": [
+        "jangan mengarang hasil pertandingan yang tidak ada di topik",
+        "jangan mengarang statistik pemain"
+      ]
+    },
+    {
+      "id": "kuliner",
+      "label": "Kuliner Rumahan",
+      "handle": "@dapur.sahabat",
+      "niche": "resep dapur rumah dan jajanan pasar Indonesia",
+      "audience": "rumah tangga dan anak muda yang suka memasak dan ingin hemat",
+      "tone": "santai, menggugah napsu, banyak tips praktis",
+      "keywords": [
+        "kuliner", "resep", "masak", "dapur", "jajanan", "kue", "camilan",
+        "sambal", "nasi", "soto", "bakso", "gorengan"
+      ],
+      "source_query": "resep memasak indonesia",
+      "seed_topics": [
+        "Resep jajanan pasar yang gampang dan murah",
+        "Ide menu makan siang hemat",
+        "Cara menyimpan bahan segar agar awet",
+        "Kreasi camilan dari bahan sederhana"
+      ],
+      "hashtags": [
+        "#resep", "#masak", "#dapur", "#jajanan", "#kulinermurah",
+        "#masakrumah", "#resepindonesia", "#cemilan"
+      ],
+      "avoid": [
+        "jangan mengarang kandungan nutrisi",
+        "jangan menyebut bahan yang tidak ada di daftar bahan"
+      ]
+    },
+    {
+      "id": "fashion",
+      "label": "Fashion Harian",
+      "handle": "@gaya.pakai",
+      "niche": "ootd dan styling harian yang murah meriah",
+      "audience": "perempuan dan laki-laki Indonesia usia 18-30 yang suka bergaya tapi hemat",
+      "tone": "bersahabat, memberi Ide konkret, bukan bahasa yang sleek",
+      "keywords": [
+        "ootd", "fashion", "style", "gaya", "outfit", "hijab", "dress",
+        "sepatu", "tas", "jam tangan", "accessories", "mix and match"
+      ],
+      "source_query": "ootd stylish indonesia",
+      "seed_topics": [
+        "Ide OOTD sederhana untuk ke kampus",
+        "Cara mix and match pakaian yang sering dipakai",
+        "Tips memilih busana budget 300 ribu",
+        "Aksesoris yang bikin outfit sederhana terlihat rapi"
+      ],
+      "hashtags": [
+        "#ootd", "#ootdindonesia", "#fashiontips", "#style",
+        "#ootdmurah", "#dailyoutfit", "#gaya", "#hijabstyle"
+      ],
+      "avoid": [
+        "jangan mengarang nama brand yang tidak disebut pengguna",
+        "jangan menjanjikan harga yang tidak disebut pengguna"
+      ]
+    }
+  ]
+}
