@@ -96,8 +96,8 @@ Task yang dikenali:
 | --- | --- |
 | `content` | `buatkan 3 konten mlbb` |
 | `tco_weekly` | `tco minggu ini` |
-| `league_standing` | `/liga A`, `liga b klasemen` |
-| `arena_schedule` | `arena kings minggu ini`, `/arena link <url>` |
+| `league_standing` | `/liga Liga 1`, `liga 2 klasemen`, `jadwal liga 1` |
+| `arena_schedule` | `arena kings bulan ini`, `/arena link <url>` |
 | `history` | `/riwayat mlbb` |
 | `plan` | `/plan`, `buatkan plan konten mingguan` |
 
@@ -109,6 +109,14 @@ sebagai pembuatan konten, bukan pembacaan klasemen.
 Penentuan topik membuang kata kerja, penanda format, dan penghubung, lalu
 membuang kata kunci akun hanya bila sisa topik masih punya isi. "counter
 hayabusa" tetap utuh, bukan menjadi "hayabusa".
+
+Intent punya dua kunci tambahan untuk task operasional:
+
+- `stage`: tahap pengingat. Dideteksi dari `h-14`, `h-7`, `h-2`, `h-1`, atau
+  bentuk jam seperti `2 jam lagi`. "2 jam" dicek lebih dulu karena lebih
+  spesifik, supaya tidak tertangkap sebagai H-2 hari.
+- `jadwal`: true bila kata `jadwal` atau `berikutnya` disebut, supaya klasemen
+  Liga juga menampilkan match berikutnya.
 
 ---
 
@@ -338,46 +346,113 @@ Pilih akun:
 
 Menu tiap akun punya tombol task: catur punya TCO/Liga/Arena, MLBB punya
 Patch/Meta/Hero/Counter/MPL/Esports, fashion punya OOTD/Styling/Affiliate.
+Menu catur juga punya `⏱ Pengingat Arena` yang membuka submenu tahap pengingat,
+karena tahap itu bukan tombol utama yang paling sering dipakai.
 
 Tombol tidak punya logika sendiri. `keyboards.task_request()` menyusun teks
 permintaan dari tombol, lalu teks itu diproses router dan `build_package()`
 seperti pesan biasa. Satu jalur kebenaran, bukan dua.
 
 `handle_callback()` menangani `menu:back`, `menu:account:<id>`,
-`menu:task:<id>:<task>:<arg>`, dan `menu:history:<id>`. Polling kini meminta
-`callback_query` selain `message`.
+`menu:task:<id>:<task>:<arg>`, dan `menu:history:<id>`. Argumen `__stages__`
+berarti tombol itu membuka submenu tahap, bukan menjalankan perintah. Polling
+kini meminta `callback_query` selain `message`.
 
 ---
 
 ## 12. Klub Catur dari Spreadsheet
 
-Akun `chess` punya `mode: ["club_operations"]`, jadi TCO, Liga, dan Arena
-Kings memakai data spreadsheet, bukan riset tren. Angka tidak pernah datang dari
-model.
+Akun `chess` punya `mode: ["content", "club_operations"]`. Mode
+`club_operations` membuat TCO dan Liga memakai data spreadsheet, bukan riset
+tren. Angka tidak pernah datang dari model.
 
-`utils/chess/spreadsheet.py` membaca dari dua sumber:
+`utils/chess/spreadsheet.py` membaca dari tiga sumber, urut dari yang paling
+diprioritaskan:
 
-| Sumber | Cara |
-| --- | --- |
-| Google Sheets REST API | `SHEET_CREDENTIALS_JSON` berisi JSON service account |
-| CSV lokal | `SHEET_CSV_PATH` |
+| Prioritas | Sumber | Cara |
+| --- | --- | --- |
+| 1 | Google Sheets REST API | `SHEET_CREDENTIALS_JSON` berisi JSON service account |
+| 2 | CSV lokal | `SHEET_CSV_PATH` |
+| 3 | File .xlsx lokal | `SHEET_XLSX_PATH` |
 
-Satu CSV boleh memuat beberapa tabel berurutan; baris header dicari per tabel,
-dan pembacaan berhenti saat baris header tabel berikutnya muncul.
+Template .xlsx dibuat sekali dengan:
+
+```bash
+.venv\Scripts\python.exe scripts\make_sheet_template.py
+```
+
+Hasilnya `club-data-template.xlsx` berisi sheet `TCO`, `Liga`, `Arena`, dan
+`Petunjuk`. Nama sheet dan kolom sudah sesuai yang dibaca modul, jadi tidak ada
+kode yang perlu disesuaikan. Baris kuning adalah contoh; hapus setelah mengisi
+data asli.
+
+Sheet `TCO` berupa jadwal mingguan, kolomnya `Judul`, `Mode`, `Tanggal`,
+`Waktu`, `Format`, `Lokasi`, `Link`, `Keterangan`. Sheet `Liga` hanya cadangan karena klasemen diambil dari situs resmi TCO.
+
+Sheet `Arena` berbeda: isinya konfigurasi dua kolom, kunci di kolom A dan nilai
+di kolom B. Kuncinya `Link Klub`, `Link Arena`, `Link Form`, `Jam`, `Format`,
+`Durasi`, `Standby`, `Batas Form`, `Kontak 1` sampai `Kontak 4`, dan
+`Keterangan`. Tanggal Arena Kings, sistem reward, syarat klaim, dan penutup
+tidak perlu diinput: tanggal dihitung bot dan teks template sudah tetap di kode.
+
+Salin template menjadi `club-data.xlsx`, isi datanya, lalu set
+`SHEET_XLSX_PATH=club-data.xlsx` di `.env`. `club-data.xlsx` sudah masuk
+`.gitignore` supaya data asli tidak ikut ter-commit.
+
+Untuk mengecek koneksi tanpa menjalankan bot:
+
+```bash
+.venv\Scripts\python.exe scripts\check_sheet_data.py
+```
+
+Script itu hanya membaca. Ia menyebutkan sumber spreadsheet yang aktif, isi tiap
+sheet, baris contoh yang masih tertinggal, apakah endpoint web TCO bisa dibaca,
+dan sampl klasemen tiap liga supaya angkanya bisa dibandingkan langsung dengan
+situs.
+
+Satu CSV boleh memuat beberapa tabel berurutan; baris kosong mengakhiri
+tabel, jadi catatan di bawah tabel tidak terbaca sebagai data. Baris header
+dicari per tabel, bukan diasumsikan di baris pertama.
 
 Kolom yang dikenali menerima beberapa nama: `Nama`/`Player`, `Poin`/`Points`,
-`Menang`/`Win`, `Tanggal`/`Date`, `Waktu`/`Jam`. Tanggal diterima dalam format
-`2026-10-14`, `14/10/2026`, `14-10-2026`, dan `2026/10/14`.
+`Menang`/`Win`, `Tanggal`/`Date`, `Waktu`/`Jam`, `Judul`/`Title`,
+`Mode`/`Jenis`. Tanggal diterima dalam format `2026-10-14`, `14/10/2026`,
+`14-10-2026`, dan `2026/10/14`. Kolom tambahan diabaikan dan tidak merusak
+pembacaan.
 
 Tiga modul hasil turunannya:
 
-- `utils/chess/tco.py` membangun pesan WhatsApp internal, caption sosmed, dan
-  baris poster. Bila jadwal belum ada, bot mengatakannya terus terang.
-- `utils/chess/liga.py` membangun berita klasemen, tabel yang bisa disalin, dan
-  baris leaderboard.
-- `utils/chess/arena.py` membangun dua tahap. Tahap 1 pengumuman tanpa link;
-  tahap 2 setelah link dikirim lewat `/arena link <url>`. Link tidak pernah
-  dikarang; tahap 1 menyatakan link akan dibagikan menjelang acara.
+- `utils/chess/tco.py` untuk Internal Mingguan TCO. Template pesan mengikuti isi
+  sheet: kolom `Judul`, `Mode`, `Tanggal`, `Waktu`, `Format`, `Lokasi`, `Link`,
+  dan `Keterangan` semua ikut terbaca apa adanya. Kalau `Judul` kosong, dipakai
+  bawaan `TCO - TIKTOK CHESS ONLINE`; kalau `Mode` kosong, `Internal Mingguan`.
+  Tiga tahap: pesan utama (H-2), pengingat satu hari (H-1), dan pengingat satu
+  jam. Bila jadwal belum ada, bot mengatakannya terus terang.
+- `utils/chess/liga.py` untuk klasemen TCO. Sumber utama adalah endpoint JSON
+  publik `https://web-tco.vercel.app/api/liga` (lihat `utils/chess/webtco.py`),
+  karena berisi 4 liga, jadwal per ronde, dan hasil per sesi yang diperbarui
+  panitia setiap minggu. Sheet `Liga` hanya dipakai kalau situs tidak terbaca.
+  Tanpa nama liga, bot menampilkan ringkasan season, bukan gabungan semua liga,
+  karena poin antar liga tidak sebanding.
+- `utils/chess/arena.py` untuk Arena Kings, memakai template tetap sesuai
+  ketentuan. Tanggal dihitung sendiri: Rabu pertama setiap bulan, 23.00 WIB,
+  format 3+0 selama 120 Menit, terbuka untuk semua klub. Sheet `Arena` berisi
+  konfigurasi dua kolom (kunci di kolom A, nilai di kolom B): `Link Klub`,
+  `Link Arena`, `Link Form`, `Jam`, `Format`, `Durasi`, `Standby`, `Batas Form`,
+  `Kontak 1` sampai `Kontak 4`, dan `Keterangan`. Sistem reward, syarat klaim,
+  catatan penting, penutup, dan kontak bawaan sudah permanen di kode, jadi tidak
+  perlu diinput tiap bulan. Bot menghasilkan tiga tahap: pengumuman (dipakai
+  H-14 dan H-7), pengingat 2 jam, dan pengingat 1 jam. Tanpa `Link Arena` di
+  sheet dan tanpa link dari user, bot hanya menulis link arena muncul di halaman
+  club `Event`; tidak ada URL yang dikarang.
+
+Perhitungan poin liga di `webtco.py` meniru aturan situs, bukan aturan baru:
+satu match berisi dua game (menang 1, remis 0.5, kalah 0); skor 1-1 dipecah
+pakai `game1_result`/`game2_result` bila ada, karena 1 menang 1 kalah dan 2 remis
+sama-sama bernilai 1; walkover mengurangi 1 poin untuk yang pertama dan 3 poin
+untuk dua atau lebih; 3 walkover atau lebih diskualifikasi dan dipindah ke urutan
+bawah. Urutan klasemen: tidak diskualifikasi, poin, menang, ELO, nama. Modul ini
+hanya membaca, tidak pernah menulis ke situs.
 
 Contoh keluaran TCO:
 
@@ -475,10 +550,11 @@ utils/
   keyboards.py               tombol inline dan teks permintaan
   engines/                   aturan khusus per akun
   chess/
-    spreadsheet.py           baca Google Sheets atau CSV
-    tco.py                   pengumuman TCO mingguan
-    liga.py                  berita dan tabel klasemen
-    arena.py                 dua tahap Arena Kings
+    spreadsheet.py           baca Google Sheets, CSV, atau XLSX
+    webtco.py                baca klasemen, jadwal, dan hasil dari situs TCO
+    tco.py                   Internal Mingguan TCO plus pengingat H-2, H-1, 1 jam
+    liga.py                  berita, tabel klasemen, dan jadwal berikutnya
+    arena.py                 template tetap Arena Kings plus 3 tahap pengingat
   scraper.py                 riset tren via Playwright
   content_generator.py       caption + teks visual dari OpenRouter
   image_maker.py             render frame dan kartu
@@ -487,9 +563,19 @@ utils/
   tiktok.py                  Content Posting API (tidak dipakai alur ini)
   instagram.py               Meta Graph API (tidak dipakai alur ini)
   ai_generator.py            generator caption lama (dipakai main.py)
+scripts/
+  make_sheet_template.py     buat club-data-template.xlsx sekali saja
+  check_sheet_data.py        cek sumber data tanpa menjalankan bot
+club-data-template.xlsx      template spreadsheet yang bisa di-commit
+template-klub-tco.md         catatan template tetap dari panitia
 tests/                       test suite pytest
 main.py                      agen terjadwal sekali jalan (alur lama)
 ```
+
+`template-klub-tco.md` adalah catatan panitia soal template yang harus persis
+diikuti, bukan file yang dibaca bot. Isinya sudah diterjemahkan jadi teks tetap
+di `utils/chess/arena.py` dan kolom sheet di `utils/chess/spreadsheet.py`, jadi
+file itu hanya acuan saat ketentuan أوضح berubah.
 
 `main.py` adalah agen lama berbasis GitHub Actions yang berjalan terjadwal.
 Bot `bot.py` adalah alur on-demand yang sekarang dipakai. Keduanya tidak
@@ -523,14 +609,23 @@ Opsional:
 | `CONTENT_LOG_PATH` | `output/content-bot.log` | Lokasi file log |
 | `TELEGRAM_ALLOWED_CHATS` | kosong | Chat tambahan, pisahkan dengan koma |
 | `SHEET_CREDENTIALS_JSON` | kosong | JSON service account Google Sheets |
-| `SHEET_CSV_PATH` | kosong | CSV lokal sebagai pengganti Sheets API |
+| `SHEET_CSV_PATH` | kosong | CSV lokal, dipakai sebelum XLSX |
+| `SHEET_XLSX_PATH` | kosong | File .xlsx lokal |
 
 Bot berhenti sendiri kalau `TELEGRAM_CHAT_ID` kosong atau `accounts.json`
 tidak terbaca, dan alasannya dicatat di log.
 
-Task TCO, Liga, dan Arena Kings butuh salah satu dari `SHEET_CREDENTIALS_JSON`
-atau `SHEET_CSV_PATH`. Tanpa keduanya, bot tetap jalan dan menyatakan data
-belum tersedia; tidak ada angka yang dikarang.
+Task TCO butuh salah satu dari tiga variabel sheet di atas. Tanpa semuanya, bot
+tetap jalan dan menyatakan data belum tersedia; tidak ada tanggal yang dikarang.
+
+Liga tidak butuh spreadsheet. Sumber utamanya endpoint JSON publik
+`https://web-tco.vercel.app/api/liga`, jadi klasemen tetap jalan walau
+`SHEET_*` kosong. Sheet Liga hanya dibaca kalau situs tidak bisa dibaca.
+
+Arena Kings juga tidak butuh data jadwal: tanggal dihitung bot (Rabu pertama
+setiap bulan, 23.00 WIB, 3+0 selama 120 Menit). Variabel sheet hanya opsional
+untuk mengganti link klub, link arena, link form, jam, format, durasi, batas
+form, dan kontak.
 
 ---
 
@@ -540,6 +635,12 @@ belum tersedia; tidak ada angka yang dikarang.
 # sekali saja
 .venv\Scripts\python.exe -m pip install -r requirements.txt
 .venv\Scripts\python.exe -m playwright install chromium
+
+# sekali saja, kalau mau memakai data klub catur
+.venv\Scripts\python.exe scripts\make_sheet_template.py
+# isi club-data-template.xlsx, salin jadi club-data.xlsx, lalu set
+# SHEET_XLSX_PATH=club-data.xlsx di .env
+.venv\Scripts\python.exe scripts\check_sheet_data.py
 
 # setiap kali dipakai
 .venv\Scripts\python.exe bot.py
@@ -559,10 +660,19 @@ buatkan 3 konten mlbb tentang counter hayabusa
 bikin 1 konten tren wedding
 ootd ke kampus
 buatkan gambar dekorasi akad nikah
+
+# Klub Catur
 tco minggu ini
-/liga A
-arena kings minggu ini
+tco h-1
+tco 1 jam lagi
+/liga Liga 1
+jadwal liga 1
+arena kings bulan ini
+arena kings bulan ini h-7
+arena kings bulan ini 2 jam lagi
 /arena link https://www.chess.com/...
+
+# Umum
 /riwayat mlbb
 /menu
 /akun
@@ -570,6 +680,8 @@ arena kings minggu ini
 ```
 
 `/menu` membuka tombol, sehingga sebagian besar perintah tidak perlu diketik.
+Menu akun `chess` punya tombol `⏱ Pengingat Arena` yang membuka submenu tahap:
+Pengumuman (H-14 dan H-7), 2 Jam, dan 1 Jam.
 
 ---
 

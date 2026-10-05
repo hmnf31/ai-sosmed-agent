@@ -53,6 +53,33 @@ def test_tco_found_from_csv(tmp_path, monkeypatch):
     assert result["source"] == "csv"
 
 
+def test_tco_reads_judul_and_mode(tmp_path, monkeypatch):
+    """Judul dan Mode ikut terbaca supaya template pesan mengikuti isi sheet."""
+    csv_file = _write_csv(
+        tmp_path / "tco.csv",
+        [
+            ["Judul", "Mode", "Tanggal", "Waktu", "Link"],
+            ["TCO Mingguan #12", "Internal Mingguan", "2026-10-14", "20:00",
+             "https://chess.com/tco/12"],
+        ],
+    )
+    monkeypatch.setenv("SHEET_CSV_PATH", csv_file)
+    result = spreadsheet.get_tco_schedule(datetime(2026, 10, 14))
+    assert result["judul"] == "TCO Mingguan #12"
+    assert result["mode"] == "Internal Mingguan"
+
+
+def test_tco_missing_judul_and_mode_are_empty(tmp_path, monkeypatch):
+    csv_file = _write_csv(
+        tmp_path / "tco.csv",
+        [["Tanggal", "Waktu"], ["2026-10-14", "20:00"]],
+    )
+    monkeypatch.setenv("SHEET_CSV_PATH", csv_file)
+    result = spreadsheet.get_tco_schedule(datetime(2026, 10, 14))
+    assert result["judul"] == ""
+    assert result["mode"] == ""
+
+
 @pytest.mark.parametrize("tanggal", ["2026-10-14", "14/10/2026", "14-10-2026", "2026/10/14"])
 def test_tco_accepts_common_date_formats(tmp_path, monkeypatch, tanggal):
     csv_file = _write_csv(
@@ -103,34 +130,54 @@ def test_league_without_data_returns_message(tmp_path, monkeypatch):
     assert rows == []
 
 
-def test_arena_marks_link_status(tmp_path, monkeypatch):
+def test_arena_reads_key_value_settings(tmp_path, monkeypatch):
     csv_file = _write_csv(
         tmp_path / "arena.csv",
         [
-            ["Tanggal", "Waktu", "Link", "Arena Kings"],
-            ["2020-01-01", "23:00", "https://old", "Arena Kings"],
-            ["2030-01-01", "23:00", "", "Arena Kings"],
-            ["2030-02-01", "23:00", "https://baru", "Arena Kings"],
+            ["Link Klub", "https://chess.com/ak"],
+            ["Jam", "22.00 WIB"],
+            ["Format", "Blitz 5 menit"],
+            ["Multiklub", "Ya"],
         ],
     )
     monkeypatch.setenv("SHEET_CSV_PATH", csv_file)
-    events, _ = spreadsheet.get_arena_schedule(datetime(2026, 10, 5))
-    statuses = [e["status"] for e in events]
-    assert statuses == ["lewat", "menunggu_link", "link_tersedia"]
+    settings, _ = spreadsheet.read_settings()
+    # Kunci dinormalkan, nilai disimpan apa adanya supaya "23.00 WIB" tetap rapi.
+    assert settings == {
+        "link_klub": "https://chess.com/ak",
+        "jam": "22.00 WIB",
+        "format": "Blitz 5 menit",
+        "multiklub": "Ya",
+    }
+
+
+def test_arena_settings_stop_at_blank_row(tmp_path, monkeypatch):
+    """Catatan di bawah isi tidak boleh terbaca sebagai pengaturan."""
+    csv_file = _write_csv(
+        tmp_path / "arena.csv",
+        [
+            ["Link Klub", "https://chess.com/ak"],
+            [],
+            ["Keterangan", "ini catatan, bukan pengaturan"],
+        ],
+    )
+    monkeypatch.setenv("SHEET_CSV_PATH", csv_file)
+    settings, _ = spreadsheet.read_settings()
+    assert settings == {"link_klub": "https://chess.com/ak"}
 
 
 def test_arena_empty_sheet(tmp_path, monkeypatch):
     monkeypatch.setenv("SHEET_CSV_PATH", str(_write_csv(tmp_path / "a.csv", [])))
-    events, _ = spreadsheet.get_arena_schedule(datetime(2026, 10, 5))
-    assert events == []
+    settings, _ = spreadsheet.read_settings()
+    assert settings == {}
 
 
-def test_arena_sheet_without_arena_column(tmp_path, monkeypatch):
-    csv_file = _write_csv(tmp_path / "a.csv", [["Tanggal", "Waktu"], ["2026-10-07", "23:00"]])
+def test_arena_ignores_single_column_sheet(tmp_path, monkeypatch):
+    """Satu kolom bukan format pengaturan; tidak ada data yang dikarang."""
+    csv_file = _write_csv(tmp_path / "a.csv", [["Link Klub"], ["https://x"]])
     monkeypatch.setenv("SHEET_CSV_PATH", csv_file)
-    events, reason = spreadsheet.get_arena_schedule(datetime(2026, 10, 5))
-    assert events == []
-    assert "Arena" in reason
+    settings, _ = spreadsheet.read_settings()
+    assert settings == {}
 
 
 def test_header_alias_matching():
@@ -141,12 +188,12 @@ def test_header_alias_matching():
 
 
 def test_single_csv_with_multiple_tables(tmp_path, monkeypatch):
-    """Satu CSV boleh memuat TCO, Liga, dan Arena berurutan."""
+    """Satu CSV boleh memuat beberapa tabel berurutan, dipisahkan baris kosong."""
     csv_file = _write_csv(
         tmp_path / "club.csv",
         [
-            ["Tanggal", "Waktu", "Link", "Arena Kings"],
-            ["2026-10-07", "20:00", "", "Arena Kings"],
+            ["Link Klub", "https://chess.com/ak"],
+            [],
             ["Liga", "Rank", "Nama", "Main", "Menang", "Seri", "Kalah", "Poin"],
             ["A", 1, "Player A", 5, 4, 1, 0, 13],
             ["A", 2, "Player B", 5, 4, 0, 1, 12],
@@ -157,9 +204,8 @@ def test_single_csv_with_multiple_tables(tmp_path, monkeypatch):
     standings, _ = spreadsheet.get_league_standings("A")
     assert [r["nama"] for r in standings] == ["Player A", "Player B"]
 
-    events, _ = spreadsheet.get_arena_schedule(datetime(2026, 10, 5))
-    assert len(events) == 1
-    assert events[0]["status"] == "menunggu_link"
+    settings, _ = spreadsheet.read_settings()
+    assert settings == {"link_klub": "https://chess.com/ak"}
 
 
 def test_tco_found_in_multi_table_csv(tmp_path, monkeypatch):

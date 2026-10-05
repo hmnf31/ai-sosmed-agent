@@ -4,9 +4,10 @@ Bot membaca angka langsung dari spreadsheet, bukan dari ingatan model. Kalau
 koneksi gagal atau baris tidak lengkap, fungsi mengembalikan nilai kosong dan
 status yang jelas, bukan angka tebakan.
 
-Dua sumber yang didukung:
+Tiga sumber yang didukung:
 - Google Sheets REST API v4 lewat service account JSON.
 - CSV lokal untuk dipakai tanpa kredensial apa pun.
+- File .xlsx lokal, dibaca tanpa kredensial.
 """
 import csv
 import io
@@ -23,7 +24,8 @@ TIMEOUT = 30
 
 RANGE_TCO = "TCO!A2:Z50"
 RANGE_LEAGUE = "Liga!A2:Z500"
-RANGE_MEMBERS = "Members!A2:Z200"
+# Sheet Arena berisi konfigurasi, bukan daftar acara: dua kolom kunci dan nilai.
+RANGE_ARENA_CONFIG = "Arena!A2:B20"
 
 # Nama header yang diterima. Spreadsheet milik pengguna bisa beda kapitalisasi.
 HEADER_ALIASES = {
@@ -39,8 +41,40 @@ HEADER_ALIASES = {
     "waktu": ("waktu", "time", "jam", "start"),
     "format": ("format", "tempo", "durasi", "duration", "time control"),
     "lokasi": ("lokasi", "location", "venue", "tempat"),
-    "link": ("link", "url", "tautan", "turnamen link"),
+    "link": ("link", "url", "tautan", "turnamen link", "link klub", "club link"),
     "keterangan": ("keterangan", "catatan", "note", "notes", "deskripsi"),
+    "multiklub": ("multiklub", "multi klub", "multi-club", "terbuka"),
+    "judul": ("judul", "title", "heading", "nama acara", "nama turnamen"),
+    "mode": ("mode", "jenis", "tipe", "type", "kategori"),
+}
+
+# Nama kunci konfigurasi yang dikenali di sheet Arena.
+SETTING_ALIASES = {
+    "waktu": ("waktu", "jam", "time", "mulai"),
+    "format": ("format", "tempo", "time control", "kontrol waktu"),
+    "durasi": ("durasi", "lama", "lamanya"),
+    "link": ("link", "link klub", "url", "club link", "tautan"),
+    "link_arena": ("link arena", "arena link", "arena", "tautan arena", "link invite"),
+    "link_form": (
+        "link form", "form", "formulir", "google form", "pendaftaran",
+        "link pendaftaran",
+    ),
+    "link_form": (
+        "link form", "form", "formulir", "google form", "pendaftaran",
+        "link pendaftaran",
+    ),
+    "lokasi": ("lokasi", "venue", "tempat", "platform"),
+    "standby": ("standby", "catatan standby", "keterangan standby"),
+    "batas_form": (
+        "batas form", "batas pendaftaran", "deadline", "batas waktu form",
+        "batas mengisi",
+    ),
+    "keterangan": ("keterangan", "catatan", "note"),
+    "kontak_1": ("kontak 1", "kontak1", "admin 1", "pic 1"),
+    "kontak_2": ("kontak 2", "kontak2", "admin 2", "pic 2"),
+    "kontak_3": ("kontak 3", "kontak3", "admin 3", "pic 3"),
+    "kontak_4": ("kontak 4", "kontak4", "admin 4", "pic 4"),
+    "multiklub": ("multiklub", "multi klub", "terbuka", "open"),
 }
 
 
@@ -49,12 +83,21 @@ def _wib_now():
 
 
 def is_configured():
-    """True bila ada cara membaca spreadsheet: service account atau CSV lokal."""
-    return bool(os.getenv("SHEET_CREDENTIALS_JSON")) or bool(_csv_path())
+    """True bila ada cara membaca spreadsheet: service account, CSV, atau XLSX."""
+    return (
+        bool(os.getenv("SHEET_CREDENTIALS_JSON"))
+        or bool(_csv_path())
+        or bool(_xlsx_path())
+    )
 
 
 def _csv_path():
     value = os.getenv("SHEET_CSV_PATH") or ""
+    return value if value and os.path.exists(value) else ""
+
+
+def _xlsx_path():
+    value = os.getenv("SHEET_XLSX_PATH") or ""
     return value if value and os.path.exists(value) else ""
 
 
@@ -166,13 +209,62 @@ def read_range(rng):
             raise ValueError(f"Gagal baca spreadsheet (HTTP {response.status_code}).")
         return response.json().get("values", []), "google_sheets"
 
+    # Urutan prioritas: kredensial Google, lalu CSV, lalu XLSX. CSV menang
+    # supaya mudah dipakai sebagai pengganti sementara saat menguji.
     csv_file = _csv_path()
     if csv_file:
         with open(csv_file, newline="", encoding="utf-8-sig") as handle:
             content = handle.read()
         return list(csv.reader(io.StringIO(content))), "csv"
 
+    xlsx_file = _xlsx_path()
+    if xlsx_file:
+        return _read_xlsx(xlsx_file, rng)
+
     return [], "tidak_ada"
+
+
+def _read_xlsx(path, rng):
+    """Membaca satu sheet dari file .xlsx lokal.
+
+    Baris kosong di tengah tabel dilewati supaya kolom yang belum diisi tidak
+    memutus pembacaan. Baris pertama yang benar-benar berisi data diperlakukan
+    sebagai header oleh pemanggil.
+    """
+    try:
+        from openpyxl import load_workbook
+    except ImportError as e:
+        raise ValueError(
+            "openpyxl belum terpasang. Jalankan pip install openpyxl atau pakai SHEET_CSV_PATH."
+        ) from e
+
+    sheet_name = rng.split("!")[0].strip() or None
+    workbook = load_workbook(path, read_only=True, data_only=True)
+    try:
+        if sheet_name and sheet_name in workbook.sheetnames:
+            worksheet = workbook[sheet_name]
+        else:
+            # Tanpa nama sheet yang cocok, pakai sheet data pertama yang ada.
+            worksheet = None
+            for name in workbook.sheetnames:
+                if name.strip().lower() in {"petunjuk", "readme", "catatan"}:
+                    continue
+                worksheet = workbook[name]
+                break
+            if worksheet is None:
+                return [], "xlsx"
+
+        rows = []
+        for row in worksheet.iter_rows(values_only=True):
+            values = ["" if cell is None else str(cell).strip() for cell in row]
+            rows.append(values)
+        # Baris kosong di dalam tabel sengaja dipertahankan: baris kosong
+        # adalah batas tabel, jadi catatan di bawah data tidak ikut terbaca.
+        while rows and not any(rows[-1]):
+            rows.pop()
+        return rows, "xlsx"
+    finally:
+        workbook.close()
 
 
 def _find_header(rows, required):
@@ -187,7 +279,7 @@ def _find_header(rows, required):
         mapping = _row_mapping(row)
         if needed.issubset(set(mapping.values())):
             return index, mapping
-    return None, {}
+    return None, None
 
 
 def _records(rng, required=("nama",)):
@@ -203,8 +295,11 @@ def _records(rng, required=("nama",)):
     records = []
     fields = set(mapping.values())
     for row in rows[header_index + 1:]:
-        # Baris berikutnya yang jadi header tabel lain berarti tabel berganti.
-        if any(str(cell or "").strip() for cell in row) and _starts_new_table(row, fields):
+        # Baris kosong mengakhiri tabel. Catatan di bawah tabel tidak dibaca
+        # sebagai data, dan tabel berikutnya dimulai setelah baris kosong.
+        if _is_blank(row):
+            break
+        if _starts_new_table(row, fields):
             break
         item = _row_to_dict(mapping, row)
         if any(item.values()):
@@ -220,6 +315,19 @@ def _row_mapping(row):
             if field not in mapping.values() and _field_name(header, field):
                 mapping[column] = field
     return mapping
+
+
+def _row_values(row):
+    """Menyihkan satu baris menjadi daftar teks tanpa sel kosong di ekor."""
+    values = [("" if cell is None else str(cell).strip()) for cell in row]
+    while values and values[-1] == "":
+        values.pop()
+    return values
+
+
+def _is_blank(row):
+    """Baris kosong berarti tabel selesai; catatan di bawah tabel diabaikan."""
+    return not _row_values(row)
 
 
 def _starts_new_table(row, current_fields):
@@ -253,7 +361,7 @@ def get_tco_schedule(when=None):
 
     fields = set(mapping.values())
     for row in rows[header_index + 1:]:
-        if any(str(cell or "").strip() for cell in row) and _starts_new_table(row, fields):
+        if _is_blank(row) or _starts_new_table(row, fields):
             break
         item = _row_to_dict(mapping, row)
         raw_date = item.get("tanggal") or ""
@@ -263,6 +371,8 @@ def get_tco_schedule(when=None):
         return {
             "tanggal": parsed.isoformat(),
             "tanggal_teks": raw_date,
+            "judul": item.get("judul", ""),
+            "mode": item.get("mode", ""),
             "waktu": item.get("waktu", ""),
             "format": item.get("format", ""),
             "lokasi": item.get("lokasi", ""),
@@ -277,9 +387,9 @@ def get_tco_schedule(when=None):
 
 def _tco_empty(reason):
     return {
-        "tanggal": None, "tanggal_teks": "", "waktu": "", "format": "",
-        "lokasi": "", "link": "", "keterangan": "", "source": "tidak_ada",
-        "found": False, "reason": reason,
+        "tanggal": None, "tanggal_teks": "", "judul": "", "mode": "",
+        "waktu": "", "format": "", "lokasi": "", "link": "", "keterangan": "",
+        "source": "tidak_ada", "found": False, "reason": reason,
     }
 
 
@@ -334,60 +444,26 @@ def get_league_standings(league=None):
     return rows, source
 
 
-def get_arena_schedule(when=None):
-    """Jadwal Arena Kings, default minggu depan karena link muncul mepet acara.
+def read_settings(rng=RANGE_ARENA_CONFIG):
+    """Membaca sheet konfigurasi dua kolom: kunci di kiri, nilai di kanan.
 
-    Semua baris dikembalikan beserta status: ada link, Belum ada link, atau
-    lewat tanggal. Ini membuat bot bisa membuat pengumuman lebih dulu lalu
-    menindaklanjuti dua jam sebelum acara.
+    Bentuk ini dipakai sheet Arena. Baris kosong menghentikan pembacaan supaya
+    catatan di bawah isi tidak terbaca sebagai pengaturan. Nama kunci dinormalkan
+    supaya "Link Klub", "link", dan "LINK" dibaca sama.
     """
-    target = (when or _wib_now()).date()
-    try:
-        rows, source = read_range(RANGE_TCO)
-    except ValueError as e:
-        return [], str(e)
-
+    rows, source = read_range(rng)
     if not rows:
-        return [], "Sheet Arena belum dikonfigurasi"
+        return {}, source
 
-    header_index, mapping = _find_header(rows, ("tanggal",))
-    if mapping is None:
-        return [], "Sheet TCO tidak punya kolom tanggal"
-
-    header = rows[header_index]
-    arena_columns = [i for i, cell in enumerate(header) if "arena" in _normalize_header(cell)]
-    if not arena_columns:
-        return [], "Sheet TCO tidak punya kolom Arena"
-
-    events = []
-    fields = set(mapping.values())
-    for row in rows[header_index + 1:]:
-        if any(str(cell or "").strip() for cell in row) and _starts_new_table(row, fields):
-            break
-        # Hanya baris bertanda Arena yang relevan; kolom TCO biasa diabaikan.
-        if not any(str(row[i] or "").strip() if i < len(row) else "" for i in arena_columns):
+    settings = {}
+    for row in rows:
+        values = _row_values(row)
+        if not values:
+            break  # baris kosong: catatan di bawahnya bukan pengaturan
+        if len(values) < 2:
             continue
-        item = _row_to_dict(mapping, row)
-        parsed = _parse_date(item.get("tanggal"))
-        if parsed is None:
-            continue
-        link = item.get("link", "")
-        if parsed < target:
-            status = "lewat"
-        elif link:
-            status = "link_tersedia"
-        else:
-            status = "menunggu_link"
-        events.append({
-            "tanggal": parsed.isoformat(),
-            "waktu": item.get("waktu", ""),
-            "format": item.get("format", ""),
-            "lokasi": item.get("lokasi", ""),
-            "link": link,
-            "keterangan": item.get("keterangan", ""),
-            "status": status,
-            "source": source,
-        })
-
-    events.sort(key=lambda e: e["tanggal"])
-    return events, source
+        key = _normalize_header(values[0]).replace(" ", "_")
+        value = values[1].strip()
+        if key and value:
+            settings[key] = value
+    return settings, source

@@ -107,10 +107,15 @@ Konten
 - buat 5 konten ootd untuk instagram
 
 Klub catur
-- tco minggu ini
-- /liga A
-- arena kings minggu ini
-- /arena link https://www.chess.com/...
+- tco minggu ini          (pesan utama, H-2)
+- tco h-1                 (pengingat sehari sebelum)
+- tco 1 jam lagi          (pengingat satu jam sebelum)
+- /liga Liga 1            (klasemen satu liga, tanpa nama = ringkasan season)
+- jadwal liga 1           (klasemen + match berikutnya)
+- arena kings bulan ini   (pengumuman tetap, dipakai H-14 dan H-7)
+- arena kings bulan ini 2 jam lagi
+- arena kings bulan ini 1 jam lagi
+- /arena link https://www.chess.com/...   (link arena untuk pengingat dekat)
 
 Perintah
 /menu - tombol pilih akun
@@ -348,6 +353,18 @@ def handle_callback(chat_id, message_id, callback_id, data):
             return True
         account_id, task = parts[0], parts[1]
         arg = parts[2] if len(parts) > 2 else ""
+
+        # Menu pengingat hanya menampilkan tombol tahap, belum menjalankan apa pun.
+        if arg == keyboards.STAGE_MENU_MARKER:
+            stages = keyboards.stage_markup(account_id, task)
+            if stages:
+                edit_chat_message(
+                    chat_id, message_id,
+                    f"Pilih tahap pengingat untuk {keyboards.task_request(account_id, task, '')}:",
+                    reply_markup=stages,
+                )
+            return True
+
         request = keyboards.task_request(account_id, task, arg)
 
         edit_chat_message(chat_id, message_id, f"Diproses: {request}", reply_markup=None)
@@ -440,7 +457,8 @@ def handle_message(chat_id, text, request_id=None):
             "buatkan 1 konten tren wedding\n"
             "bikin 3 konten mlbb tentang counter hayabusa\n"
             "buat pengumuman liga B\n"
-            "tco minggu ini\n\n"
+            "tco minggu ini\n"
+            "arena kings bulan ini\n\n"
             "Ketik /bantu untuk panduan lengkap.",
             chat_id=chat_id,
             reply_markup=keyboards.home_markup(),
@@ -475,14 +493,25 @@ def _handle_club_task(chat_id, intent, account, request_id):
     task = intent["task"]
 
     if task == "tco_weekly":
-        package = chess_tco.build_tco_package()
+        # Tahap pengingat H-2 dan H-1 diambil dari intent; tanpa tahap, pesan utama.
+        package = chess_tco.build_tco_package(stage=intent.get("stage") or "pengumuman")
     elif task == "league_standing":
-        package = chess_liga.build_league_package(intent.get("league"))
+        package = chess_liga.build_league_package(
+            intent.get("league"),
+            with_schedule=bool(intent.get("jadwal")),
+        )
     else:
-        package = chess_arena.build_arena_package(url=intent.get("url"))
+        # Tanpa url dari user, link diambil dari sheet Arena. URL dari
+        # "/arena link <url>" menang kalau ada, jadi perintah manual tetap jalan
+        # walau sheet belum diisi.
+        package = chess_arena.build_arena_package(
+            stage=intent.get("stage") or "pengumuman",
+            link=intent.get("url"),
+        )
 
     info(
         f"[{_stamp(chat_id)}] {task} {account['id']} "
+        f"tahap={package.get('stage', '-')} "
         f"tersedia={package.get('available')} alasan={package.get('reason', '-')}"
     )
 
@@ -494,10 +523,15 @@ def _handle_club_task(chat_id, intent, account, request_id):
                                 package.get("reason", "data tidak tersedia"))
         return
 
+    # Tahap ikut masuk ke judul supaya histori bisa membedakan pengumuman H-14,
+    # H-7, dan pengingat dekat yang isinya sama-sama pesan yang sama.
+    stage = package.get("stage")
+    title = f"{task}:{stage}" if stage else task
+
     record = history_mod.record_content(
         account["id"],
         topic=intent.get("topic") or task,
-        title=task,
+        title=title,
         task=task,
         content_type="text",
         category=task,

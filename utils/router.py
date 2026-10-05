@@ -10,7 +10,7 @@ import re
 from utils import accounts as accounts_mod
 
 # Task yang understands operands dan tidak butuh riset konten.
-OPERATIONAL_TASKS = ("tco_weekly", "league_standing", "arena_schedule", "arena_link")
+OPERATIONAL_TASKS = ("tco_weekly", "league_standing", "arena_schedule")
 CONTENT_TASKS = ("content", "research", "history", "plan")
 
 # Kata yang menandai task operasional, dipetakan ke nama task.
@@ -60,9 +60,48 @@ PERIOD_WORDS = {
 
 HISTORY_RE = re.compile(r"^\s*/?(riwayat|history|recent)\b", re.I)
 PLAN_RE = re.compile(r"\bplan\s+konten\b|\bkonten\s+mingguan\b|\bplan\s+minggu", re.I)
-LEAGUE_RE = re.compile(r"\bliga\s*([a-z])\b", re.I)
+LEAGUE_RE = re.compile(r"\bliga\s*([a-z1-4])\b", re.I)
 NUMBER_RE = re.compile(r"\b(\d{1,2})\b")
 URL_RE = re.compile(r"https?://\S+")
+
+# Penanda tahap pengingat. Dua bentuk yang lazim dipakai: "h-7" dan
+# "2 jam sebelum", jadi keduanya dipetakan ke nama tahap yang sama.
+STAGE_WORDS = {
+    "14": "pengumuman",
+    "7": "pengumuman",
+    "2": "pengumuman",
+    "1": "h1_hari",
+}
+STAGE_HOUR_WORDS = {
+    "2 jam": "h2_jam",
+    "dua jam": "h2_jam",
+    "1 jam": "h1_jam",
+    "satu jam": "h1_jam",
+}
+SCHEDULE_WORDS = ("jadwal", "jadwalnya", "coming up", "comingup", "berikutnya", "match berikutnya")
+STAGE_RE = re.compile(r"\bh\s*-?\s*(14|7|2|1)\b", re.I)
+
+
+def _detect_schedule(text):
+    """True bila pengguna meminta jadwal, bukan hanya klasemen."""
+    low = f" {(text or '').lower()} "
+    return any(word in low for word in SCHEDULE_WORDS)
+
+
+def _detect_stage(text):
+    """Menentukan tahap pengingat dari teks, atau None bila tidak disebut.
+
+    Urutan penting: pola 'jam' dicek lebih dulu karena lebih spesifik. Tanpa
+    itu, "2 jam lagi" akan terbaca sebagai h-2 hari oleh STAGE_RE.
+    """
+    low = (text or "").lower()
+    for phrase, stage in STAGE_HOUR_WORDS.items():
+        if phrase in low:
+            return stage
+    match = STAGE_RE.search(low)
+    if match:
+        return STAGE_WORDS.get(match.group(1))
+    return None
 
 
 def _clean(text):
@@ -151,7 +190,9 @@ def parse(text):
     """Mengubah chat bebas menjadi dict intent.
 
     Kunci yang selalu ada: account, task, category, topic, format, quantity,
-    platform, period, league, url, raw. Nilai bisa None bila tidak terdeteksi.
+    platform, period, league, url, stage, jadwal, raw. Nilai bisa None bila tidak
+    terdeteksi. `stage` hanya terisi untuk pengingat task operasional yang
+    menyebut tahapnya, misalnya "arena 1 jam lagi".
     """
     original = _clean(text)
     command, args = _strip_command(original)
@@ -180,10 +221,15 @@ def parse(text):
     league = None
     league_match = LEAGUE_RE.search(source) or LEAGUE_RE.search(original)
     if league_match:
+        # "Liga 1" -> "Liga 1"; "liga A" -> "A". Digit dipertahankan supaya
+        # sumber data bisa mengenali nama liganya apa adanya.
         league = league_match.group(1).upper()
 
     url = URL_RE.search(source) or URL_RE.search(original)
     url = url.group(0) if url else None
+
+    stage = _detect_stage(source) or _detect_stage(original)
+    jadwal = _detect_schedule(source) or _detect_schedule(original)
 
     # Topik diambil dari teks mentah. Kata kunci akun ('counter', 'ootd') bisa
     # jadi bagian topik itu sendiri, jadi dibuang hanya bila masih ada sisa kata.
@@ -227,6 +273,8 @@ def parse(text):
         "period": period,
         "league": league,
         "url": url,
+        "stage": stage,
+        "jadwal": jadwal,
         "command": command,
         "keyword": keyword,
         "raw": original,
@@ -254,6 +302,10 @@ def describe(intent):
         parts.append(f"qty={intent['quantity']}")
     if intent.get("league"):
         parts.append(f"league={intent['league']}")
+    if intent.get("stage"):
+        parts.append(f"stage={intent['stage']}")
+    if intent.get("jadwal"):
+        parts.append("jadwal=ya")
     if intent.get("period"):
         parts.append(f"period={intent['period']}")
     if intent.get("url"):

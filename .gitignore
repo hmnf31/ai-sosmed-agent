@@ -26,3 +26,10 @@ output/
 
 # Konfigurasi akun lokal (accounts.example.json yang dipakai sebagai template)
 accounts.json
+
+# Data klub catur. club-data-template.xlsx boleh di-commit sebagai template;
+# club-data*.xlsx berisi data asli jadi tidak boleh masuk repository.
+club-data.xlsx
+club-data-*.xlsx
+!club-data-template.xlsx
+~$*.xlsx

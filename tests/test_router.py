@@ -30,6 +30,40 @@ def test_league_free_text_also_detected():
     assert intent["league"] == "A"
 
 
+@pytest.mark.parametrize("teks,league", [
+    ("/liga Liga 1", "1"),
+    ("/liga 2", "2"),
+    ("klasemen liga 3", "3"),
+    ("liga 4", "4"),
+])
+def test_league_accepts_numeric_kasta(teks, league):
+    assert router.parse(teks)["league"] == league
+
+
+@pytest.mark.parametrize("teks,stage", [
+    ("arena kings bulan ini", None),
+    ("arena kings bulan ini h-14", "pengumuman"),
+    ("arena kings bulan ini h-7", "pengumuman"),
+    ("arena kings bulan ini 2 jam lagi", "h2_jam"),
+    ("arena kings bulan ini 1 jam lagi", "h1_jam"),
+    ("tco minggu ini h-2", "pengumuman"),
+    ("tco minggu ini h-1", "h1_hari"),
+    ("tco minggu ini 1 jam lagi", "h1_jam"),
+    ("buatkan 3 konten mlbb", None),
+])
+def test_stage_detection(teks, stage):
+    assert router.parse(teks)["stage"] == stage
+
+
+@pytest.mark.parametrize("teks,jadwal", [
+    ("liga klasemen terbaru", False),
+    ("jadwal liga 1", True),
+    ("match berikutnya", True),
+])
+def test_schedule_flag(teks, jadwal):
+    assert router.parse(teks)["jadwal"] is jadwal
+
+
 def test_league_announcement_is_content_not_standing():
     intent = router.parse("buat pengumuman liga B")
     assert intent["task"] == "content"

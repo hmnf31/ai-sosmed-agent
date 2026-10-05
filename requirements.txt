@@ -16,6 +16,10 @@ python-dotenv==1.0.1
 # Test suite: pytest -q
 pytest==9.1.1
 
+# Membuat template spreadsheet (.xlsx) dan membacanya tanpa kredensial.
+# Dipakai scripts/make_sheet_template.py dan SHEET_XLSX_PATH.
+openpyxl==3.1.5
+
 # Login Google Sheets lewat service account.
 # Opsional: hanya dipakai bila SHEET_CREDENTIALS_JSON diisi. Tanpa library ini,
 # modul utils/chess/spreadsheet.py tetap jalan lewat SHEET_CSV_PATH.

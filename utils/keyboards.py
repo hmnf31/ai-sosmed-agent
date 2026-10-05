@@ -47,6 +47,30 @@ ACCOUNT_PREFIX = "menu:account:"
 TASK_PREFIX = "menu:task:"
 HISTORY_PREFIX = "menu:history:"
 
+# Tahap pengingat yang bisa dipilih lewat tombol. Nilainya disisipkan ke teks
+# permintaan; router tetap yang memastikan tahapnya dikenali.
+STAGE_SUFFIX = {
+    "pengumuman": "",
+    "h14": " h-14",
+    "h7": " h-7",
+    "h1_hari": " h-1",
+    "h2_jam": " 2 jam lagi",
+    "h1_jam": " 1 jam lagi",
+    # Bentuk yang diketik manual, bukan hasil penekanan tombol.
+    "h-14": " h-14",
+    "h-7": " h-7",
+    "h-1": " h-1",
+    "2 jam": " 2 jam lagi",
+    "1 jam": " 1 jam lagi",
+}
+
+# Tombol per task yang punya beberapa tahap.
+STAGE_BUTTONS = {
+    "arena_schedule": ("pengumuman", "h7", "h2_jam", "h1_jam"),
+    "tco_weekly": ("pengumuman", "h1_hari", "h1_jam"),
+    "league_standing": (None, "jadwal"),
+}
+
 
 def _keyboard(rows):
     return {"inline_keyboard": rows}
@@ -78,6 +102,14 @@ def account_markup(account_id):
             row = []
     if row:
         rows.append(row)
+
+    # Task yang punya beberapa tahap pengingat mendapat submenu tersendiri,
+    # supaya tombol utama tetap ringkas.
+    if "arena_schedule" in {task for _, task, _ in items}:
+        rows.append([{
+            "text": "⏱ Pengingat Arena",
+            "callback_data": f"{TASK_PREFIX}{account_id}:arena_schedule:{STAGE_MENU_MARKER}",
+        }])
 
     rows.append([
         {"text": "🕘 Riwayat", "callback_data": f"{HISTORY_PREFIX}{account_id}"},
@@ -116,10 +148,54 @@ def account_text(account_id):
     return "\n".join(lines)
 
 
+STAGE_MENU_MARKER = "__stages__"
+
+
+def stage_markup(account_id, task):
+    """Tombol tahap untuk satu task, atau None kalau tasknya cuma satu tahap.
+
+    Callback memakai argumen sebagai tahap supaya format callback tetap sama
+    dengan task biasa: menu:task:<akun>:<task>:<argumen>.
+    """
+    stages = STAGE_BUTTONS.get(task)
+    if not stages or len(stages) == 1:
+        return None
+
+    labels = {
+        "pengumuman": "📢 Pengumuman",
+        "h14": "⏳ H-14",
+        "h7": "⏳ H-7",
+        "h1_hari": "📆 H-1 Hari",
+        "h2_jam": "⏰ 2 Jam",
+        "h1_jam": "⏰ 1 Jam",
+        "jadwal": "🗓️ Jadwal",
+    }
+    rows = []
+    row = []
+    for stage in stages:
+        text = labels.get(stage, stage)
+        row.append({
+            "text": text,
+            "callback_data": f"{TASK_PREFIX}{account_id}:{task}:{stage}",
+        })
+        if len(row) == 2:
+            rows.append(row)
+            row = []
+    if row:
+        rows.append(row)
+
+    rows.append([
+        {"text": "◀️ Kembali", "callback_data": f"{ACCOUNT_PREFIX}{account_id}"},
+    ])
+    return _keyboard(rows)
+
+
 def task_request(account_id, task, arg):
     """Membangun teks permintaan dari satu penekanan tombol.
 
     Menu hanya mengubah cara memesan; task router tetap yang memutuskan.
+    `arg` pada task bertahap berisi nama tahap, jadi tombol pengingat punya
+    kalimat sendiri.
     """
     account = accounts_mod.find_account(account_id)
     resolved_id = account["id"] if account else account_id
@@ -127,11 +203,14 @@ def task_request(account_id, task, arg):
     keyword = keywords[0] if keywords else None
 
     if task == "tco_weekly":
-        return "tco minggu ini"
+        return "tco minggu ini" + STAGE_SUFFIX.get(arg, "")
     if task == "league_standing":
+        if arg == "jadwal":
+            return "jadwal liga berikutnya"
         return "liga klasemen terbaru"
     if task == "arena_schedule":
-        return "arena kings minggu ini"
+        # Jadwal Arena Kings tetap tiap bulan, jadi kalimatnya bulanan.
+        return "arena kings bulan ini" + STAGE_SUFFIX.get(arg, "")
     if task == "plan":
         return f"buatkan plan konten mingguan {resolved_id}"
 
