@@ -39,4 +39,14 @@ jobs:
           # Ubah ke 'false' hanya setelah IG_USER_ID dan IG_ACCESS_TOKEN terisi valid.
           DRY_RUN: 'true'
           PREVIEW_FORMAT: 'video'
+          CONTENT_NICHE: ${{ vars.CONTENT_NICHE || 'mlbb' }}
+          TIKTOK_ENABLED: ${{ secrets.TIKTOK_ENABLED || 'false' }}
+          TIKTOK_CLIENT_KEY: ${{ secrets.TIKTOK_CLIENT_KEY }}
+          TIKTOK_CLIENT_SECRET: ${{ secrets.TIKTOK_CLIENT_SECRET }}
+          TIKTOK_REDIRECT_URI: ${{ secrets.TIKTOK_REDIRECT_URI }}
+          TIKTOK_REFRESH_TOKEN: ${{ secrets.TIKTOK_REFRESH_TOKEN }}
+          TIKTOK_PRIVACY_LEVEL: ${{ secrets.TIKTOK_PRIVACY_LEVEL || 'PUBLIC_TO_EVERYONE' }}
+          TIKTOK_CHUNK_SIZE_MB: ${{ secrets.TIKTOK_CHUNK_SIZE_MB || '10' }}
+          MLBB_YOUTUBE_QUERY: ${{ vars.MLBB_YOUTUBE_QUERY || 'mobile legends indonesia' }}
+          MLBB_SEED_TOPICS: ${{ vars.MLBB_SEED_TOPICS }}
         run: python main.py

@@ -9,6 +9,38 @@ DEFAULT_MODELS = [
 ]
 TIMEOUT = 120
 
+NICHES = {
+    "general": """
+    Kamu adalah seorang Social Media Manager profesional.
+    Berikut adalah tren topik hari ini: {trends}.
+
+    Tugasmu:
+    1. Buatkan 1 caption Instagram yang menarik, edukatif, dan interaktif sesuai tren tersebut.
+    2. Sertakan call-to-action (CTA) ramah di akhir kalimat.
+    3. Tambahkan 5-8 hashtag yang relevan di bagian paling bawah.
+    4. Gunakan bahasa Indonesia yang santai dan profesional.
+    5. Jawab HANYA dengan caption final, tanpa penjelasan atau proses berpikir.
+    """,
+    "mlbb": """
+    Kamu adalah content creator esports Mobile Legends: Bang Bang (MLBB) untuk akun
+    fans Indonesia. Following ini adalah topik paling baru dari kanal esports:
+    {trends}.
+
+    Tugasmu:
+    1. Buat 1 caption TikTok maksimal 60 kata yang memicu debat dan komentar.
+    2. Nada: bahasa anak muda esports Indonesia, percaya diri, sedikit humor.
+    3. Pancing interaksi dengan pertanyaan (misal prediksi hasil, pilih tim, pilih hero).
+    4. Wajib 5-8 hashtag relevan seperti #MPLID #MLBB #MobileLegends.
+    5. Jangan mengarang hasil pertandingan yang tidak ada di topik di atas.
+    6. Jawab HANYA dengan caption final, tanpa penjelasan atau proses berpikir.
+    """,
+}
+
+
+def build_prompt(trends, niche="general"):
+    template = NICHES.get(niche, NICHES["general"])
+    return template.format(trends=", ".join(trends))
+
 
 def _candidate_models():
     preferred = os.getenv("OPENROUTER_MODEL")
@@ -17,23 +49,14 @@ def _candidate_models():
     return models
 
 
-def generate_caption(trends):
-    """Mengirim tren ke OpenRouter API untuk dibuatkan caption Instagram."""
+def generate_caption(trends, niche=None):
+    """Mengirim tren ke OpenRouter API untuk dibuatkan caption sesuai niche konten."""
     api_key = os.getenv("OPENROUTER_API_KEY")
     if not api_key:
         raise ValueError("OPENROUTER_API_KEY tidak ditemukan!")
 
-    prompt = f"""
-    Kamu adalah seorang Social Media Manager profesional.
-    Berikut adalah tren topik hari ini: {", ".join(trends)}.
-
-    Tugasmu:
-    1. Buatkan 1 caption Instagram yang menarik, edukatif, dan interaktif sesuai tren tersebut.
-    2. Sertakan call-to-action (CTA) ramah di akhir kalimat.
-    3. Tambahkan 5-8 hashtag yang relevan di bagian paling bawah.
-    4. Gunakan bahasa Indonesia yang santai dan profesional.
-    5. Jawab HANYA dengan caption final, tanpa penjelasan atau proses berpikir.
-    """
+    niche = (niche or os.getenv("CONTENT_NICHE") or "general").strip().lower()
+    prompt = build_prompt(trends, niche)
 
     headers = {
         "Authorization": f"Bearer {api_key}",
