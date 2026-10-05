@@ -19,7 +19,11 @@ INIT_URL = f"{API_BASE}/post/publish/video/init/"
 STATUS_URL = f"{API_BASE}/post/publish/status/fetch/"
 TIMEOUT = 60
 
-PRIVACY_LEVELS = ("PUBLIC_TO_EVERYONE", "MUTUAL_FOLLOW_FRIENDS", "SELF_ONLY")
+PRIVACY_LEVELS = ("PUBLIC_TO_EVERYONE", "MUTUAL_FOLLOW_FRIENDS", "FOLLOWER_OF_CREATOR", "SELF_ONLY")
+
+MIN_CHUNK_BYTES = 5 * 1024 * 1024
+MAX_CHUNK_BYTES = 64 * 1024 * 1024
+MAX_CHUNKS = 1000
 
 
 def _describe(response):
@@ -151,9 +155,32 @@ def get_user_info(access_token=None):
     return user if isinstance(user, dict) else data
 
 
-def _chunk_size():
-    mb = int(os.getenv("TIKTOK_CHUNK_SIZE_MB") or 10)
-    return max(5, min(100, mb)) * 1024 * 1024
+def _chunk_size(size):
+    """Ukuran chunk 5-64 MB sesuai aturan TikTok.
+
+    Video di bawah 5 MB harus diunggah utuh, jadi chunk_size = ukuran file.
+    """
+    if size < MIN_CHUNK_BYTES:
+        return size
+
+    mb = int(os.getenv("TIKTOK_CHUNK_SIZE_MB") or 20)
+    chunk = max(5, min(mb, 64)) * 1024 * 1024
+    while size // chunk > MAX_CHUNKS:
+        chunk = min(MAX_CHUNK_BYTES, chunk * 2)
+    return min(chunk, MAX_CHUNK_BYTES)
+
+
+def _plan_chunks(size, chunk_size):
+    """TikTok mewajibkan total_chunk_count = video_size // chunk_size (pembagian bulat ke bawah).
+
+    Sisa byte digabung ke chunk terakhir, yang boleh lebih besar dari chunk_size
+    (maks 128 MB). File yang lebih kecil dari satu chunk diunggah utuh.
+    """
+    if size <= chunk_size:
+        return 1, size
+
+    total = max(1, size // chunk_size)
+    return total, chunk_size
 
 
 def _video_size(path):
@@ -162,15 +189,16 @@ def _video_size(path):
     return os.path.getsize(path)
 
 
-def _upload_binary(upload_url, path, chunk_size, max_retries=3):
+def _upload_binary(upload_url, path, chunk_size, total_chunks, max_retries=3):
     total = _video_size(path)
-    total_chunks = max(1, (total + chunk_size - 1) // chunk_size)
     print(f"[TIKTOK] Mengunggah {total / (1024 * 1024):.2f} MB dalam {total_chunks} chunk...")
 
     with open(path, "rb") as handle:
+        start = 0
         for index in range(total_chunks):
-            data = handle.read(chunk_size)
-            start = index * chunk_size
+            is_last = index == total_chunks - 1
+            length = (total - start) if is_last else chunk_size
+            data = handle.read(length)
             end = start + len(data) - 1
             headers = {
                 "Content-Type": "video/mp4",
@@ -181,7 +209,7 @@ def _upload_binary(upload_url, path, chunk_size, max_retries=3):
             for attempt in range(1, max_retries + 1):
                 try:
                     response = requests.put(upload_url, data=data, headers=headers, timeout=300)
-                    if response.status_code in (200, 201, 204):
+                    if response.status_code in (200, 201, 204, 206):
                         last_error = None
                         break
                     last_error = f"HTTP {response.status_code}: {response.text[:200]}"
@@ -191,6 +219,7 @@ def _upload_binary(upload_url, path, chunk_size, max_retries=3):
                     time.sleep(2 * attempt)
             if last_error:
                 raise TikTokError(f"Upload chunk {index + 1}/{total_chunks} gagal: {last_error}")
+            start = end + 1
 
     print("[TIKTOK] Seluruh chunk terunggah.")
 
@@ -198,7 +227,11 @@ def _upload_binary(upload_url, path, chunk_size, max_retries=3):
 def _fetch_status(publish_id, access_token):
     response = requests.post(
         STATUS_URL,
-        json={"publish_id": publish_id, "access_token": access_token},
+        headers={
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json",
+        },
+        json={"publish_id": publish_id},
         timeout=TIMEOUT,
     )
     data = _payload(response)
@@ -215,11 +248,15 @@ def publish_video(video_path, caption, access_token=None, privacy_level=None, wa
         raise TikTokError(f"TIKTOK_PRIVACY_LEVEL tidak valid: {privacy_level}")
 
     size = _video_size(video_path)
-    chunk_size = _chunk_size()
-    total_chunks = max(1, (size + chunk_size - 1) // chunk_size)
+    chunk_size = _chunk_size(size)
+    total_chunks, chunk_size = _plan_chunks(size, chunk_size)
 
     init_response = requests.post(
         INIT_URL,
+        headers={
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json",
+        },
         json={
             "post_info": {
                 "title": (caption or "")[:2200],
@@ -229,14 +266,13 @@ def publish_video(video_path, caption, access_token=None, privacy_level=None, wa
                 "disable_stitch": False,
             },
             "source_info": {
-                "source": "UPLOAD",
+                "source": "FILE_UPLOAD",
                 "video_size": size,
                 "chunk_size": chunk_size,
                 "total_chunk_count": total_chunks,
                 "video_width": 1080,
                 "video_height": 1920,
             },
-            "access_token": access_token,
         },
         timeout=TIMEOUT,
     )
@@ -249,7 +285,7 @@ def publish_video(video_path, caption, access_token=None, privacy_level=None, wa
     if not publish_id or not upload_url:
         raise TikTokError(f"Respons init tidak lengkap: {payload}")
 
-    _upload_binary(upload_url, video_path, chunk_size)
+    _upload_binary(upload_url, video_path, chunk_size, total_chunks)
 
     if not wait:
         return {"publish_id": publish_id, "status": "UPLOADED"}
