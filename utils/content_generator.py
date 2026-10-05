@@ -40,8 +40,10 @@ PERMINTAAN PEMAKAI
 KONTEKS TOPIK YANG HARUS DIPAKAI
 {topics}
 
-ATURAN
-{avoid}
+KATEGORI KONTEN: {category}
+
+ATURAN WAJIB (tidak boleh dilanggar)
+{fact_rules}
 
 Tugasmu. Jawab HANYA dengan objek JSON, tanpa teks lain, tanpa pembungkus markdown:
 
@@ -51,7 +53,9 @@ Tugasmu. Jawab HANYA dengan objek JSON, tanpa teks lain, tanpa pembungkus markdo
   "points": ["poin 1", "poin 2", "poin 3"],
   "caption": "caption lengkap 3-5 kalimat, bahasa Indonesia, ada ajakan ber komentar",
   "hashtags": ["#tag1", "#tag2", "#tag3", "#tag4", "#tag5"],
-  "cta": "satu kalimat ajakan bertindak, maksimal 10 kata"
+  "cta": "satu kalimat ajakan bertindak, maksimal 10 kata",
+  "angle": "sudut pandang konten ini, satu kalimat pendek",
+  "source_url": "URL sumber utama bila ada, kalau tidak ada string kosong"
 }}
 
 Ketentuan tambahan:
@@ -59,6 +63,8 @@ Ketentuan tambahan:
 - "title" dan "points" tidak boleh mengandung karakter newline.
 - "hashtags" hanya dari daftar yang boleh dipakai atau yang wajar untuk niche ini.
 - Jangan mengarang angka, harga, tanggal, nama brand, atau hasil yang tidak ada di konteks.
+- "source_url" ditulis sebagai URL polos, tanpa format markdown seperti [teks](url).
+- Bila data yang dibutuhkan tidak ada, tulis "data tidak tersedia" di dalam caption.
 - Balas hanya JSON.
 """
 
@@ -76,8 +82,39 @@ def _candidate_models():
     return models
 
 
-def build_prompt(request, topics, account, max_points=MAX_FRAMES):
-    avoid = account.get("avoid") or ["jangan mengarang fakta"]
+def _clean_source_url(raw):
+    """Menyaring URL dari jawaban model.
+
+    Model kadang membungkus URL sebagai markdown link. Bot harus mengirim URL
+    polos supaya bisa disalin dan diklik, jadi semua bentuk markdown dibuang.
+    """
+    text = str(raw or "").strip()
+    if not text:
+        return ""
+    match = re.search(r"https?://\S+", text)
+    if not match:
+        return ""
+    url = match.group(0).strip().rstrip(".,);]}")
+    url = url.replace("**", "").replace("<", "").replace(">", "")
+    return url if url.startswith(("http://", "https://")) else ""
+
+
+def build_prompt(request, topics, account, category=None, max_points=MAX_FRAMES,
+                 avoid_topics=None, angle_hint=""):
+    """Menyusun prompt per akun.
+
+    fact_check_rules ikut dimasukkan sebagai aturan wajib supaya MLBB dan catur
+    tidak menghasilkan angka atau hasil pertandingan karangan.
+    """
+    rules = account.get("fact_check_rules") or []
+    avoid = account.get("avoid") or []
+    combined = list(dict.fromkeys([*avoid, *rules])) or ["jangan mengarang fakta"]
+
+    angle_block = f"\nSUDUT PANDANG: {angle_hint}\n" if angle_hint else ""
+    avoid_block = "\nTOPIK YANG SUDAH PERNAH DIBUAT (jangan ulangi, ambil angle lain):\n" + "\n".join(
+        f"- {t}" for t in (avoid_topics or [])
+    ) + "\n" if avoid_topics else ""
+
     return PROMPT_TEMPLATE.format(
         label=account.get("label", "Akun"),
         handle=account.get("handle", ""),
@@ -86,9 +123,11 @@ def build_prompt(request, topics, account, max_points=MAX_FRAMES):
         tone=account.get("tone", "santai dan ramah"),
         request=request,
         topics="\n".join(f"- {t}" for t in topics) or "- (belum ada topik, gunakan pengetahuan umum)",
-        avoid="\n".join(f"- {a}" for a in avoid),
+        category=category or "umum",
+        avoid=avoid_block or "\n(none)\n",
+        fact_rules="\n".join(f"- {r}" for r in combined),
         max_points=max_points,
-    )
+    ) + angle_block
 
 
 def _extract_json(text):
@@ -171,16 +210,22 @@ def normalize_payload(raw, account):
         "cta": _one_line(raw.get("cta"), 70),
         "caption": caption.strip(),
         "hashtags": tags,
+        "angle": _one_line(raw.get("angle"), 120),
+        "source_url": _clean_source_url(raw.get("source_url")),
     }
 
 
-def generate_content(request, topics, account):
+def generate_content(request, topics, account, category=None, avoid_topics=None,
+                      angle_hint=""):
     """Menghasilkan caption + teks visual terstruktur untuk satu akun."""
     api_key = os.getenv("OPENROUTER_API_KEY")
     if not api_key:
         raise ValueError("OPENROUTER_API_KEY tidak ditemukan!")
 
-    prompt = build_prompt(request, topics, account)
+    prompt = build_prompt(
+        request, topics, account, category=category,
+        avoid_topics=avoid_topics, angle_hint=angle_hint,
+    )
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",

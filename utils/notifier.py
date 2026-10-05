@@ -1,4 +1,6 @@
+import json
 import os
+
 import requests
 
 API_URL = "https://api.telegram.org/bot{token}/{method}"
@@ -47,8 +49,12 @@ def get_updates(offset=None, timeout=30, allowed_updates=None):
         return []
 
 
-def send_chat_message(text, chat_id=None, parse_mode=None):
-    """Mengirim pesan ke chat tertentu. Default-nya ke TELEGRAM_CHAT_ID."""
+def send_chat_message(text, chat_id=None, parse_mode=None, reply_markup=None):
+    """Mengirim pesan ke chat tertentu. Default-nya ke TELEGRAM_CHAT_ID.
+
+    reply_markup dipakai untuk tombol inline, dikirim sebagai JSON string sesuai
+   .format Telegram Bot API.
+    """
     token = _token()
     target = chat_id or os.getenv("TELEGRAM_CHAT_ID")
     if not token or not target:
@@ -58,15 +64,66 @@ def send_chat_message(text, chat_id=None, parse_mode=None):
     payload = {"chat_id": target, "text": text, "disable_web_page_preview": True}
     if parse_mode:
         payload["parse_mode"] = parse_mode
+    if reply_markup:
+        payload["reply_markup"] = json.dumps(reply_markup)
 
     try:
-        response = requests.post(API_URL.format(token=token, method="sendMessage"), json=payload, timeout=30)
+        response = requests.post(
+            API_URL.format(token=token, method="sendMessage"), json=payload, timeout=30
+        )
         if response.status_code == 200:
             return True
         print(f"[NOTIFIER ERROR] sendMessage HTTP {response.status_code}: {response.text[:200]}")
     except requests.RequestException as e:
         print(f"[NOTIFIER ERROR] Gagal mengirim pesan: {e}")
     return False
+
+
+def edit_chat_message(chat_id, message_id, text, reply_markup=None):
+    """Mengganti isi pesan lama, dipakai saat tombol diperbarui."""
+    token = _token()
+    target = chat_id or os.getenv("TELEGRAM_CHAT_ID")
+    if not token or not target:
+        return False
+
+    payload = {"chat_id": target, "message_id": message_id, "text": text}
+    if reply_markup:
+        payload["reply_markup"] = json.dumps(reply_markup)
+
+    try:
+        response = requests.post(
+            API_URL.format(token=token, method="editMessageText"), json=payload, timeout=30
+        )
+        if response.status_code == 200:
+            return True
+        # 400 dengan 'message is not modified' bukan kegagalan yang perlu dilihat.
+        if response.status_code == 400 and "not modified" in response.text:
+            return True
+        print(f"[NOTIFIER ERROR] editMessageText HTTP {response.status_code}: {response.text[:200]}")
+    except requests.RequestException as e:
+        print(f"[NOTIFIER ERROR] Gagal mengubah pesan: {e}")
+    return False
+
+
+def answer_callback(callback_id, text="", show_alert=False):
+    """Menghentikan animasi tombol 'sedang memproses' di sisi Telegram."""
+    token = _token()
+    if not token or not callback_id:
+        return False
+    payload = {"callback_query_id": callback_id}
+    if text:
+        payload["text"] = text[:190]
+    if show_alert:
+        payload["show_alert"] = True
+    try:
+        response = requests.post(
+            API_URL.format(token=token, method="answerCallbackQuery"),
+            json=payload,
+            timeout=15,
+        )
+        return response.status_code == 200
+    except requests.RequestException:
+        return False
 
 
 def send_telegram_notification(message):

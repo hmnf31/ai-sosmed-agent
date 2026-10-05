@@ -1,7 +1,8 @@
 """Registry akun: satu file JSON mendefinisikan semua akun yang dikelola.
 
-Setiap akun punya niche, nada bicara, kata kunci untuk mengenali permintaan, dan
-daftar hashtag. Bot memakai ini untuk tahu konten harus dibuat untuk akun mana.
+Schema v2 menambah mode kerja (content / club_operations / affiliate), kategori
+konten, aturan fact-check, dan template default per akun. Field baru bersifat
+opsional supaya file schema v1 lama tetap bisa dibaca.
 """
 import json
 import os
@@ -10,6 +11,25 @@ import re
 DEFAULT_PATH = "accounts.json"
 
 REQUIRED_FIELDS = ("id", "label", "niche")
+
+# Field opsional yang selalu punya nilai default supaya pemanggil tidak perlu
+# memeriksa keberadaan kunci.
+DEFAULTS = {
+    "mode": ["content"],
+    "keywords": [],
+    "hashtags": [],
+    "avoid": [],
+    "fact_check_rules": [],
+    "content_categories": [],
+    "default_templates": [],
+    "research_sources": ["youtube"],
+    "seed_topics": [],
+    "emoji": "",
+    "audience": "",
+    "tone": "",
+    "handle": "",
+    "source_query": "",
+}
 
 
 def accounts_path():
@@ -37,13 +57,29 @@ def load(path=None):
     if not accounts:
         raise ValueError(f"File akun {target} tidak memuat daftar akun.")
 
+    seen = set()
     for account in accounts:
         missing = [f for f in REQUIRED_FIELDS if not account.get(f)]
         if missing:
             raise ValueError(
                 f"Akun '{account.get('id', '?')}' di {target} kehilangan field: {', '.join(missing)}"
             )
+        account_id = _normalize(account["id"])
+        if account_id in seen:
+            raise ValueError(f"Akun dengan id '{account['id']}' muncul lebih dari sekali di {target}.")
+        seen.add(account_id)
+        _apply_defaults(account)
+
+    data.setdefault("schema_version", 1)
     return data
+
+
+def _apply_defaults(account):
+    """Melengkapi field opsional yang kosong supaya pemangled callers aman."""
+    for key, fallback in DEFAULTS.items():
+        if account.get(key) in (None, "", []):
+            account[key] = list(fallback) if isinstance(fallback, list) else fallback
+    return account
 
 
 def list_accounts(path=None):
@@ -68,15 +104,33 @@ def default_account(path=None):
     return accounts[0] if accounts else None
 
 
-def match_account(text, path=None):
+def has_mode(account, mode):
+    """True bila akun mendukung mode kerja tertentu."""
+    return mode in (account or {}).get("mode", [])
+
+
+def operational_accounts(path=None):
+    """Akun yang punya mode club_operations, mis. klub catur."""
+    return [a for a in list_accounts(path) if has_mode(a, "club_operations")]
+
+
+def schema_version(path=None):
+    return load(path).get("schema_version", 1)
+
+
+def match_account(text, path=None, fallback=True):
     """Mencari akun dari teks bebas, contoh: 'buatkan konten trend wedding'.
 
     Mengembalikan (account, keyword_yang_cocok). Cocokkan berdasarkan kata kunci
     paling panjang supaya 'wedding day' menang lebih dulu dari 'wedding'.
+
+    Dengan fallback=False, teks yang tidak memuat kata kunci akun menghasilkan
+    (None, None). Router memakai ini supaya bisa membedakan 'akun tidak disebut'
+    dari 'akun disebut'.
     """
     haystack = _normalize(text)
     if not haystack:
-        return None, None
+        return (default_account(path) if fallback else None), None
 
     best = None
     for account in list_accounts(path):
@@ -87,4 +141,4 @@ def match_account(text, path=None):
 
     if best:
         return best
-    return default_account(path), None
+    return (default_account(path) if fallback else None), None

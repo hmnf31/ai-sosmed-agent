@@ -12,3 +12,11 @@ Pillow==12.3.0
 
 # Utilitas Environment
 python-dotenv==1.0.1
+
+# Test suite: pytest -q
+pytest==9.1.1
+
+# Login Google Sheets lewat service account.
+# Opsional: hanya dipakai bila SHEET_CREDENTIALS_JSON diisi. Tanpa library ini,
+# modul utils/chess/spreadsheet.py tetap jalan lewat SHEET_CSV_PATH.
+cryptography==50.0.2

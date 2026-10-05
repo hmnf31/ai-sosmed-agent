@@ -116,7 +116,7 @@ def render_content_video_frames(content, output_dir=None, footer="AI Sosmed Agen
             [
                 ("bold", 36, "GILIRANMU", accent, 0),
                 ("bold", 92, cta.upper(), white, 120),
-                ("regular", 46, "Tulis di komentar, jangan cuma点赞 diam-diam.", muted, 80),
+                ("regular", 46, "Tulis di komentar, jangan cuma diam-diam.", muted, 80),
                 ("bold", 40, "#" + footer.replace(" ", ""), accent, 140),
             ],
             os.path.join(output_dir, f"frame-3-{stamp}.png"), VIDEO_WIDTH, VIDEO_HEIGHT,

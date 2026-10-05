@@ -1,0 +1,1 @@
+"""Modul khusus klub catur: spreadsheet, TCO, Liga, dan Arena Kings."""
