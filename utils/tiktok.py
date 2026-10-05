@@ -22,6 +22,19 @@ TIMEOUT = 60
 PRIVACY_LEVELS = ("PUBLIC_TO_EVERYONE", "MUTUAL_FOLLOW_FRIENDS", "SELF_ONLY")
 
 
+def _payload(response):
+    """TikTok mengembalikan payload datar; sebagian endpoint membungkusnya di 'data'."""
+    try:
+        body = response.json()
+    except ValueError:
+        return {}
+    if isinstance(body, dict):
+        inner = body.get("data")
+        if isinstance(inner, dict):
+            return inner
+    return body if isinstance(body, dict) else {}
+
+
 class TikTokError(Exception):
     pass
 
@@ -65,10 +78,10 @@ def exchange_authorization_code(code, client_key=None, client_secret=None, redir
         },
         timeout=TIMEOUT,
     )
-    data = response.json() if response.content else {}
-    if response.status_code != 200:
+    data = _payload(response)
+    if response.status_code != 200 or not data.get("access_token"):
         raise TikTokError(f"Tukar kode gagal (HTTP {response.status_code}): {data}")
-    return data.get("data", data)
+    return data
 
 
 def refresh_access_token(refresh_token=None):
@@ -88,10 +101,10 @@ def refresh_access_token(refresh_token=None):
         },
         timeout=TIMEOUT,
     )
-    data = response.json() if response.content else {}
-    if response.status_code != 200:
+    data = _payload(response)
+    if response.status_code != 200 or not data.get("access_token"):
         raise TikTokError(f"Refresh token gagal (HTTP {response.status_code}): {data}")
-    return data.get("data", data)
+    return data
 
 
 def get_access_token():
@@ -111,10 +124,11 @@ def get_user_info(access_token=None):
         params={"fields": "open_id,union_id,display_name,avatar_url", "access_token": access_token},
         timeout=TIMEOUT,
     )
-    data = response.json() if response.content else {}
+    data = _payload(response)
     if response.status_code != 200:
         raise TikTokError(f"Gagal ambil info akun (HTTP {response.status_code}): {data}")
-    return data.get("data", {}).get("user", {})
+    user = data.get("user")
+    return user if isinstance(user, dict) else data
 
 
 def _chunk_size():
@@ -167,10 +181,10 @@ def _fetch_status(publish_id, access_token):
         json={"publish_id": publish_id, "access_token": access_token},
         timeout=TIMEOUT,
     )
-    data = response.json() if response.content else {}
+    data = _payload(response)
     if response.status_code != 200:
         raise TikTokError(f"Gagal cek status (HTTP {response.status_code}): {data}")
-    return data.get("data", {})
+    return data
 
 
 def publish_video(video_path, caption, access_token=None, privacy_level=None, wait=True, poll_seconds=90):
@@ -206,15 +220,14 @@ def publish_video(video_path, caption, access_token=None, privacy_level=None, wa
         },
         timeout=TIMEOUT,
     )
-    init_data = init_response.json() if init_response.content else {}
     if init_response.status_code != 200:
-        raise TikTokError(f"Inisialisasi unggah gagal (HTTP {init_response.status_code}): {init_data}")
+        raise TikTokError(f"Inisialisasi unggah gagal (HTTP {init_response.status_code}): {_payload(init_response)}")
 
-    payload = init_data.get("data", {})
+    payload = _payload(init_response)
     publish_id = payload.get("publish_id")
     upload_url = payload.get("upload_url")
     if not publish_id or not upload_url:
-        raise TikTokError(f"Respons init tidak lengkap: {init_data}")
+        raise TikTokError(f"Respons init tidak lengkap: {payload}")
 
     _upload_binary(upload_url, video_path, chunk_size)
 
