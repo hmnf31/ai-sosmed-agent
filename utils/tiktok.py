@@ -22,6 +22,25 @@ TIMEOUT = 60
 PRIVACY_LEVELS = ("PUBLIC_TO_EVERYONE", "MUTUAL_FOLLOW_FRIENDS", "SELF_ONLY")
 
 
+def _describe(response):
+    """Ringkasan error TikTok: TikTok membungkus detail di objek 'error', bukan 'data'."""
+    body = _payload(response)
+    error = body.get("error") if isinstance(body, dict) else None
+    if isinstance(error, dict):
+        parts = [f"HTTP {response.status_code}"]
+        if error.get("code") and error["code"] != "ok":
+            parts.append(str(error["code"]))
+        if error.get("message"):
+            parts.append(str(error["message"]))
+        if error.get("log_id"):
+            parts.append(f"log_id {error['log_id']}")
+        return " | ".join(parts)
+    if body:
+        return f"HTTP {response.status_code}: {body}"
+    raw = (response.text or "").strip()
+    return f"HTTP {response.status_code}: {raw[:200]}" if raw else f"HTTP {response.status_code} (respons kosong)"
+
+
 def _payload(response):
     """TikTok mengembalikan payload datar; sebagian endpoint membungkusnya di 'data'."""
     try:
@@ -80,7 +99,7 @@ def exchange_authorization_code(code, client_key=None, client_secret=None, redir
     )
     data = _payload(response)
     if response.status_code != 200 or not data.get("access_token"):
-        raise TikTokError(f"Tukar kode gagal (HTTP {response.status_code}): {data}")
+        raise TikTokError(f"Tukar kode gagal: {_describe(response)}")
     return data
 
 
@@ -103,7 +122,7 @@ def refresh_access_token(refresh_token=None):
     )
     data = _payload(response)
     if response.status_code != 200 or not data.get("access_token"):
-        raise TikTokError(f"Refresh token gagal (HTTP {response.status_code}): {data}")
+        raise TikTokError(f"Refresh token gagal: {_describe(response)}")
     return data
 
 
@@ -121,12 +140,13 @@ def get_user_info(access_token=None):
     access_token = access_token or get_access_token()
     response = requests.get(
         USER_INFO_URL,
-        params={"fields": "open_id,union_id,display_name,avatar_url", "access_token": access_token},
+        params={"fields": "open_id,union_id,avatar_url,display_name"},
+        headers={"Authorization": f"Bearer {access_token}"},
         timeout=TIMEOUT,
     )
     data = _payload(response)
     if response.status_code != 200:
-        raise TikTokError(f"Gagal ambil info akun (HTTP {response.status_code}): {data}")
+        raise TikTokError(f"Gagal ambil info akun: {_describe(response)}")
     user = data.get("user")
     return user if isinstance(user, dict) else data
 
@@ -183,7 +203,7 @@ def _fetch_status(publish_id, access_token):
     )
     data = _payload(response)
     if response.status_code != 200:
-        raise TikTokError(f"Gagal cek status (HTTP {response.status_code}): {data}")
+        raise TikTokError(f"Gagal cek status: {_describe(response)}")
     return data
 
 
@@ -221,7 +241,7 @@ def publish_video(video_path, caption, access_token=None, privacy_level=None, wa
         timeout=TIMEOUT,
     )
     if init_response.status_code != 200:
-        raise TikTokError(f"Inisialisasi unggah gagal (HTTP {init_response.status_code}): {_payload(init_response)}")
+        raise TikTokError(f"Inisialisasi unggah gagal: {_describe(init_response)}")
 
     payload = _payload(init_response)
     publish_id = payload.get("publish_id")
