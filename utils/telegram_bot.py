@@ -1,13 +1,17 @@
-"""Bot Telegram=on-demand content generator.
+"""Bot Telegram on-demand content generator.
 
 Alur: pengguna chat "buatkan 1 konten trend wedding", bot mencari akun yang cocok
 dari accounts.json, mengambil topik terpanas, meminta caption + teks visual ke
 OpenRouter, merender video/gambar, lalu mengirim media dan captionnya. Tidak ada
 publikasi otomatis; unggah ke TikTok dikerjakan manual oleh pengguna.
 """
+import json
+import logging
 import os
 import re
+import sys
 import time
+from logging.handlers import RotatingFileHandler
 
 from utils import accounts as accounts_mod
 from utils.content_generator import generate_content
@@ -19,6 +23,69 @@ from utils.notifier import (
 )
 from utils.scraper import get_topic_trends
 from utils.video_maker import render_content_video
+
+LOG_PATH = os.getenv("CONTENT_LOG_PATH") or "output/content-bot.log"
+LOG_FORMAT = "%(asctime)s %(levelname)-7s %(message)s"
+
+
+class _PrintToLog:
+    """Mengalihkan print() modul lain ke logger.
+
+    Modul scraper, AI, dan renderer masih memakai print(). Tanpa ini jejaknya
+    hanya muncul di konsol dan hilang dari file log.
+    """
+
+    def write(self, message):
+        text = str(message).rstrip()
+        if text:
+            logging.getLogger("bot").info("%s", text)
+
+    def flush(self):
+        pass
+
+
+def setup_logging(path=LOG_PATH):
+    """Menulis log ke file dan konsol. Error tidak pernah menggagalkan bot."""
+    if isinstance(sys.stdout, _PrintToLog):
+        return
+
+    console = sys.stdout
+    try:
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+        handler = RotatingFileHandler(path, maxBytes=1_000_000, backupCount=3, encoding="utf-8")
+    except OSError as e:
+        print(f"[BOT] Gagal menyiapkan file log ({e}), pakai konsol saja.")
+        return
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format=LOG_FORMAT,
+        handlers=[handler, logging.StreamHandler(console)],
+        force=True,
+    )
+    # Print dari modul lain ikut masuk ke file log yang sama.
+    sys.stdout = _PrintToLog()
+
+
+def log(level, message):
+    """Pencatatan yang aman: kegagalan log tidak boleh menghentikan pemrosesan."""
+    try:
+        logging.log(level, message)
+    except Exception:
+        pass
+
+
+def info(message):
+    log(logging.INFO, message)
+
+
+def warn(message):
+    log(logging.WARNING, message)
+
+
+def error(message):
+    log(logging.ERROR, message)
+
 
 HELP_TEXT = """Bot pembuat konten. Cukup chat bebas, contoh:
 
@@ -107,9 +174,14 @@ def _collect_topics(account, request):
     return topics
 
 
-def build_package(request, account):
+def build_package(request, account, chat_id=""):
     """Menggabungkan riset, teks AI, dan render media menjadi satu paket."""
+    started = time.time()
+    label = account.get("label", account.get("id", "?"))
+
     topics = _collect_topics(account, request)
+    info(f"[{_stamp(chat_id)}] topik {label}: {'; '.join(topics)}")
+
     content = generate_content(request, topics, account)
     fmt = _requested_format(request)
 
@@ -118,13 +190,23 @@ def build_package(request, account):
     else:
         media = render_content_video(content, footer=account.get("handle") or account.get("label", ""))
 
-    return {
+    package = {
         "media": media,
         "format": fmt,
         "content": content,
         "topics": topics,
         "account": account,
     }
+    info(
+        f"[{_stamp(chat_id)}] {label} selesai: {fmt} {os.path.basename(media)} "
+        f"({time.time() - started:.1f}s)"
+    )
+    return package
+
+
+def _stamp(chat_id):
+    """Label singkat untuk correlating log."""
+    return f"chat {chat_id}" if chat_id else "klien"
 
 
 def _reply(chat_id, package):
@@ -142,6 +224,7 @@ def _reply(chat_id, package):
     send_chat_message(f"{header}{caption}", chat_id=chat_id)
 
     if not sent:
+        warn(f"[chat {chat_id}] media gagal terkirim: {package['media']}")
         send_chat_message(
             f"Media gagal terkirim. File ada di: {package['media']}", chat_id=chat_id
         )
@@ -181,16 +264,24 @@ def handle_message(chat_id, text):
     if not text:
         return
 
+    info(f"[chat {chat_id}] pesan masuk: {text}")
+
     if _handle_command(chat_id, text):
         return
 
     try:
         account, request, keyword = _resolve_request(text)
     except FileNotFoundError as e:
+        error(f"[chat {chat_id}] file akun bermasalah: {e}")
         send_chat_message(f"File akun belum ada: {e}", chat_id=chat_id)
+        return
+    except ValueError as e:
+        error(f"[chat {chat_id}] file akun rusak: {e}")
+        send_chat_message(f"Konfigurasi akun bermasalah: {e}", chat_id=chat_id)
         return
 
     if _is_unclear(request, keyword):
+        info(f"[chat {chat_id}] permintaan tidak jelas, dibalas dengan panduan: {text!r}")
         send_chat_message(
             "Pesannya belum jelas. Sebutkan niche-nya, contoh:\n"
             "buatkan 1 konten trend wedding\n"
@@ -200,15 +291,16 @@ def handle_message(chat_id, text):
         )
         return
 
+    info(f"[chat {chat_id}] Proses: akun={account['id']} topik={request!r} keyword={keyword!r}")
     send_chat_message(
         f"Sedang membuat konten untuk {account.get('label')}... ({request})", chat_id=chat_id
     )
 
     try:
-        package = build_package(request, account)
+        package = build_package(request, account, chat_id=chat_id)
         _reply(chat_id, package)
     except Exception as e:
-        print(f"[BOT ERROR] {e}")
+        error(f"[chat {chat_id}] gagal membuat konten: {e}")
         send_chat_message(f"Gagal membuat konten: {e}", chat_id=chat_id)
 
 
@@ -221,18 +313,21 @@ def authorized_chat():
 
 def run(poll_timeout=30):
     """Long polling: bot berjalan permanen sampai proses dihentikan."""
-    print("=== [BOT PEMBUAT KONTEN AKTIF] ===")
+    info("=== [BOT PEMBUAT KONTEN AKTIF] ===")
     try:
         for account in accounts_mod.list_accounts():
-            print(f"  - {account['id']}: {account.get('niche', '')}")
+            info(f"  - {account['id']}: {account.get('niche', '')}")
     except (FileNotFoundError, ValueError) as e:
-        print(f"[BOT] Gagal memuat akun: {e}")
+        error(f"Gagal memuat akun: {e}")
         return
 
     allowed = authorized_chat()
     if not allowed:
-        print("[BOT] TELEGRAM_CHAT_ID belum diset, bot tidak bisa memproses pesan.")
+        error("TELEGRAM_CHAT_ID belum diset, bot tidak bisa memproses pesan.")
         return
+
+    info(f"Chat diizinkan: {sorted(allowed)}")
+    info(f"Log ditulis ke: {LOG_PATH}")
 
     offset = None
     while True:
@@ -249,16 +344,17 @@ def run(poll_timeout=30):
             if not chat or not text:
                 continue
             if str(chat) not in allowed:
-                print(f"[BOT] Chat {chat} tidak diizinkan, pesan diabaikan.")
+                warn(f"Chat {chat} tidak diizinkan, pesan diabaikan.")
                 continue
 
             try:
                 handle_message(str(chat), text)
             except Exception as e:
-                print(f"[BOT ERROR] {e}")
+                error(f"[chat {chat}] kesalahan tak terduga: {e}")
                 send_chat_message(f"Terjadi kesalahan: {e}", chat_id=str(chat))
             time.sleep(1)
 
 
 if __name__ == "__main__":
+    setup_logging()
     run()
