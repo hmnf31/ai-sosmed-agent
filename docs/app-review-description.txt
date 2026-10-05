@@ -1,0 +1,5 @@
+Products: Content Posting API only. Scopes: video.publish and user.info.basic.
+
+Flow: a daily scheduled job (GitHub Actions cron) runs our service. It (1) opens a YouTube search for recent "Mobile Legends Indonesia" uploads and reads public titles to find current esports topics, (2) sends those topics to an LLM and receives an Indonesian caption with hashtags, (3) renders a 1080x1920 vertical video with Pillow and ffmpeg, (4) calls POST /v2/oauth/token with its refresh token to get an access token, (5) calls GET /v2/user/info/ with user.info.basic to confirm the authorized account, (6) calls POST /v2/post/publish/video/init/, uploads the mp4 to the returned upload_url in chunks, then polls POST /v2/post/publish/status/fetch/ until PUBLISH_COMPLETE. A Telegram bot reports the result.
+
+No Login Kit, no sharing, no shop or voucher features, no end-user accounts. The only user data read is the open_id of the owner's own TikTok account, used solely to confirm the post destination.
