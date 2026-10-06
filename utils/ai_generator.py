@@ -1,11 +1,17 @@
 import os
 import requests
 
-API_URL = "https://openrouter.ai/api/v1/chat/completions"
+API_URL = os.getenv("OPENROUTER_API_URL", "https://openrouter.ai/api/v1/chat/completions")
 DEFAULT_MODELS = [
+    "cohere/north-mini-code:free",
+    "inclusionai/ling-3.0-flash-sante:free",
+    "openrouter/free",
+    "google/gemma-4-26b-a4b-it:free",
+    "google/gemma-4-31b-it:free",
     "nvidia/nemotron-3-ultra-550b-a55b:free",
-    "dots-studio/dots-3-note-preview:free",
-    "qwen/qwen3.8-27b:free",
+    "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+    "liquid/lfm-2.5-2.6b:free",
+    "openai/gpt-oss-20b:free",
 ]
 TIMEOUT = 120
 
@@ -69,6 +75,7 @@ def generate_caption(trends, niche=None):
             "model": model,
             "messages": [{"role": "user", "content": prompt}],
             "max_tokens": 800,
+            "reasoning": {"enabled": True},
         }
 
         print(f"[AI] Mengirim permintaan ke OpenRouter (model: {model})...")

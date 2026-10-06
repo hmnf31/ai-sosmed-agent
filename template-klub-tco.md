@@ -110,7 +110,7 @@ lalu untuk pengingat H-14 hari sebelum kegiatan berlangsung dan H-7 hari sebelum
 
 - Untuk mingguan template menyesuaikan data dari Judul , mode, tanggal , link dll nya.
 untuk pengingat setiap H-2 dan H-1 sebelum kegiatan berlangsung 
-- 
+- ambil spreadsheet di https://docs.google.com/spreadsheets/d/1p2zQJ6Jou5ymmrMsMpk5xKKT7Vc_AvuFsXxWlJFE2gg/edit?usp=sharing
 
 
 # TCO Liga 

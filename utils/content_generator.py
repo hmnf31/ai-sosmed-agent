@@ -14,7 +14,7 @@ import re
 
 import requests
 
-API_URL = "https://openrouter.ai/api/v1/chat/completions"
+API_URL = os.getenv("OPENROUTER_API_URL", "https://openrouter.ai/api/v1/chat/completions")
 DEFAULT_MODELS = [
     "nvidia/nemotron-3-ultra-550b-a55b:free",
     "dots-studio/dots-3-note-preview:free",
