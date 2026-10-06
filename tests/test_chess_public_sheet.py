@@ -50,13 +50,22 @@ def _serve(monkeypatch, sheets):
 
 def test_public_id_accepts_plain_id_and_full_url(monkeypatch):
     monkeypatch.setenv("SHEET_PUBLIC_ID", "11Q3AIGofm1ZQ")
-    assert spreadsheet._public_id() == "11Q3AIGofm1ZQ"
+    assert spreadsheet._public_ids() == ["11Q3AIGofm1ZQ"]
 
     monkeypatch.setenv(
         "SHEET_PUBLIC_ID",
         "https://docs.google.com/spreadsheets/d/11Q3AIGofm1ZQ/edit?usp=sharing",
     )
-    assert spreadsheet._public_id() == "11Q3AIGofm1ZQ"
+    assert spreadsheet._public_ids() == ["11Q3AIGofm1ZQ"]
+
+
+def test_multiple_public_ids_can_be_given(monkeypatch):
+    monkeypatch.setenv(
+        "SHEET_PUBLIC_ID",
+        "https://docs.google.com/spreadsheets/d/FIRST_ID/edit "
+        "https://docs.google.com/spreadsheets/d/SECOND_ID/edit",
+    )
+    assert spreadsheet._public_ids() == ["FIRST_ID", "SECOND_ID"]
 
 
 def test_public_sheet_counts_as_configured(monkeypatch):
@@ -173,7 +182,7 @@ def test_html_response_reports_permission_problem(monkeypatch):
         lambda *a, **k: _Response(b"<html>Sign in</html>"),
     )
     with pytest.raises(ValueError) as exc:
-        spreadsheet._public_tables()
+        spreadsheet._public_tables_for("SHEET_ID_ABC")
     assert "dibagikan" in str(exc.value)
 
 
@@ -183,8 +192,53 @@ def test_http_error_reports_status(monkeypatch):
         spreadsheet.requests, "get", lambda *a, **k: _Response(b"", 404)
     )
     with pytest.raises(ValueError) as exc:
-        spreadsheet._public_tables()
+        spreadsheet._public_tables_for("SHEET_ID_ABC")
     assert "404" in str(exc.value)
+
+
+def test_two_public_sheets_each_serve_their_tab(monkeypatch):
+    """Sheet pertama punya Standings, sheet kedua punya TCO — keduanya dipakai."""
+    liga_payload = _workbook_bytes(
+        {"Standings": [["league", "name", "points"], ["Liga 1", "Bima", 5.0]]}
+    )
+    tco_payload = _workbook_bytes(
+        {
+            "TCO": [
+                ["Judul", "Mode", "Tanggal", "Waktu", "Format", "Lokasi", "Link", "Keterangan"],
+                ["TCO Mingguan", "Internal Mingguan", "2026-10-07", "20.00 WIB", "Blitz 3+0", "Online", "", ""],
+            ]
+        }
+    )
+
+    monkeypatch.setenv(
+        "SHEET_PUBLIC_ID",
+        "https://docs.google.com/spreadsheets/d/LIGA_ID/edit "
+        "https://docs.google.com/spreadsheets/d/TCO_ID/edit",
+    )
+
+    calls = []
+
+    def fake_get(url, *args, **kwargs):
+        calls.append(url)
+        if "LIGA_ID" in url:
+            return _Response(liga_payload)
+        if "TCO_ID" in url:
+            return _Response(tco_payload)
+        return _Response(b"", 404)
+
+    monkeypatch.setattr(spreadsheet.requests, "get", fake_get)
+    spreadsheet._PUBLIC_CACHE.clear()
+
+    standings, source = spreadsheet.get_league_standings("Liga 1")
+    assert source == "google_public:Standings"
+    assert standings[0]["nama"] == "Bima"
+
+    from datetime import datetime
+
+    schedule = spreadsheet.get_tco_schedule(datetime(2026, 10, 7))
+    assert schedule["found"] is True
+    assert schedule["source"] == "google_public:tco"
+
 
 
 def test_available_tabs_lists_public_sheet(monkeypatch):

@@ -27,8 +27,9 @@ def _wib_now():
 def _active_source():
     if os.getenv("SHEET_CREDENTIALS_JSON"):
         return "SHEET_CREDENTIALS_JSON (Google Sheets)"
-    if sheet_mod._public_id():
-        return f"SHEET_PUBLIC_ID -> {sheet_mod._public_id()}"
+    ids = sheet_mod._public_ids()
+    if ids:
+        return f"SHEET_PUBLIC_ID -> {', '.join(ids)}"
     if sheet_mod._xlsx_path():
         return f"SHEET_XLSX_PATH -> {sheet_mod._xlsx_path()}"
     if sheet_mod._csv_path():

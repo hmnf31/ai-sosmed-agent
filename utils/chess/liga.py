@@ -24,7 +24,8 @@ def build_league_package(league=None, with_schedule=False):
     poin antar liga tidak sebanding.
 
     `with_schedule` menambahkan jadwal match yang belum selesai. Jadwal diambil
-    hanya dari situs, karena sheet Liga tidak berisi jadwal.
+    pertama dari situs resmi TCO; bila situs gagal atau tidak ada jadwal untuk
+    liga ini, bot jatuh ke sheet tab Schedules sebagai cadangan.
     """
     if not league:
         return build_overview_package()
@@ -49,6 +50,12 @@ def build_league_package(league=None, with_schedule=False):
 
     if with_schedule:
         jadwal, err = webtco.upcoming(league, limit=5)
+        if not jadwal and err:
+            sheet_jadwal, sheet_err = spreadsheet.get_schedule(league)
+            if sheet_jadwal:
+                jadwal, err = sheet_jadwal, None
+            else:
+                err = err or sheet_err
         package["jadwal"] = jadwal
         package["jadwal_error"] = err
         package["table"] = "\n\n".join(

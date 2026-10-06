@@ -12,9 +12,9 @@ Tiga sumber yang didukung:
 - File .xlsx lokal, dibaca tanpa kredensial.
 
 Sumber dibaca berurutan dan berhenti di sumber pertama yang benar-benar punya
-baris untuk range itu. Jadi spreadsheet publik bisaoclassemen tanpa TCO,
-sementara jadwal TCO tetap diambil dari file lokal. Tidak ada sumber yang
-dipaksa代替 padahal isinya tidak ada.
+baris untuk range itu. Jadi spreadsheet publik bisa menyediakan klasemen tanpa
+TCO, sementara jadwal TCO tetap diambil dari file lokal. Tidak ada sumber yang
+dipaksa pakai padahal isinya tidak ada.
 """
 import csv
 import io
@@ -39,6 +39,7 @@ _PUBLIC_CACHE = {}
 
 RANGE_TCO = "TCO!A2:Z50"
 RANGE_LEAGUE = "Liga!A2:Z500"
+RANGE_SCHEDULES = "Schedules!A2:Z500"
 # Sheet Arena berisi konfigurasi, bukan daftar acara: dua kolom kunci dan nilai.
 RANGE_ARENA_CONFIG = "Arena!A2:B20"
 
@@ -47,6 +48,7 @@ RANGE_ARENA_CONFIG = "Arena!A2:B20"
 TAB_ALIASES = {
     "tco": ("TCO", "Jadwal", "Jadwal TCO", "Internal Mingguan"),
     "liga": ("Liga", "Standings", "Klasemen"),
+    "schedules": ("Schedules", "Jadwal Liga", "Schedule", "Match"),
     "arena": ("Arena", "Arena Kings", "Pengaturan"),
 }
 
@@ -54,7 +56,9 @@ TAB_ALIASES = {
 HEADER_ALIASES = {
     "liga": ("liga", "league", "divisi", "division"),
     "rank": ("rank", "peringkat", "pos", "position", "posisi"),
-    "nama": ("nama", "name", "player", "pemain", "peserta", "anggota"),
+    "nama": ("nama", "name", "player", "pemain", "peserta", "anggota", "player1", "player1_name", "pemain1"),
+    "lawan": ("lawan", "opponent", "player2", "player2_name", "pemain2", "vs"),
+    "round": ("round", "ronde", "babak", "putaran"),
     "main": ("main", "played", "match", "match played", "pertandingan"),
     "menang": ("menang", "win", "wins", "won"),
     "seri": ("seri", "draw", "draws", "tie", " seri"),
@@ -66,7 +70,7 @@ HEADER_ALIASES = {
     "lokasi": ("lokasi", "location", "venue", "tempat"),
     "link": ("link", "url", "tautan", "turnamen link", "link klub", "club link"),
     "keterangan": ("keterangan", "catatan", "note", "notes", "deskripsi"),
-"multiklub": ("multiklub", "multi klub", "multi-club", "terbuka"),
+    "multiklub": ("multiklub", "multi klub", "multi-club", "terbuka"),
     "judul": ("judul", "title", "heading", "nama acara", "nama turnamen"),
     "mode": ("mode", "jenis", "tipe", "type", "kategori"),
 }
@@ -88,10 +92,6 @@ SETTING_ALIASES = {
     "durasi": ("durasi", "lama", "lamanya"),
     "link": ("link", "link klub", "url", "club link", "tautan"),
     "link_arena": ("link arena", "arena link", "arena", "tautan arena", "link invite"),
-    "link_form": (
-        "link form", "form", "formulir", "google form", "pendaftaran",
-        "link pendaftaran",
-    ),
     "link_form": (
         "link form", "form", "formulir", "google form", "pendaftaran",
         "link pendaftaran",
@@ -119,19 +119,35 @@ def is_configured():
     """True bila ada cara membaca spreadsheet: service account, publik, CSV, XLSX."""
     return (
         bool(os.getenv("SHEET_CREDENTIALS_JSON"))
-        or bool(_public_id())
+        or bool(_public_ids())
         or bool(_csv_path())
         or bool(_xlsx_path())
     )
 
 
-def _public_id():
-    """ID spreadsheet publik. Menerima ID polos maupun URL lengkap."""
-    raw = (os.getenv("SHEET_PUBLIC_ID") or "").strip()
-    if not raw:
-        return ""
-    match = re.search(r"/spreadsheets/d/([a-zA-Z0-9-_]+)", raw)
-    return match.group(1) if match else raw
+def _public_ids():
+    """Daftar ID spreadsheet publik, urut prioritas.
+
+    Menerima ID polos, URL penuh, atau beberapa nili dipisah koma/spasi/baris.
+    Dua sheet publik bisa aktif sekaligus: mis. sheet liga di satu ID, TCO/Arena
+    di ID lain, sehingga masing-masing tab dibaca dari sheet yang tepat.
+    """
+    raw = os.getenv("SHEET_PUBLIC_ID", "")
+    if not raw or not raw.strip():
+        return []
+    ids = []
+    for token in re.split(r"[,\s]+", raw.strip()):
+        token = token.strip()
+        if not token:
+            continue
+        match = re.search(r"/spreadsheets/d/([a-zA-Z0-9-_]+)", token)
+        ids.append(match.group(1) if match else token)
+    # Hapus duplikat yang berurutan, simpan urutan asli.
+    seen = []
+    for sid in ids:
+        if sid not in seen:
+            seen.append(sid)
+    return seen
 
 
 def _csv_path():
@@ -256,9 +272,10 @@ def available_tabs():
     """
     result = {}
 
-    if _public_id():
+    ids = _public_ids()
+    if ids:
         try:
-            result["google_public"] = sorted(_public_tables())
+            result["google_public"] = sorted(_all_public_tabs())
         except ValueError:
             result["google_public"] = []
 
@@ -280,20 +297,16 @@ def available_tabs():
     return result
 
 
-def _public_tables():
-    """Unduh spreadsheet publik sekali, lalu simpan daftar tabnya di cache.
+def _public_tables_for(sheet_id):
+    """Unduh satu spreadsheet publik sekali, lalu simpan tab-tabnya di cache.
 
     Workbook diunduh sebagai .xlsx utuh, bukan per tab, karena nama tabnya
     dibutuhkan untuk memutuskan apakah sebuah range benar-benar tersedia.
     """
-    sheet_id = _public_id()
-    if not sheet_id:
-        return {}
-
     now = time.monotonic()
     cached = _PUBLIC_CACHE.get(sheet_id)
     if cached and now - cached["at"] < PUBLIC_CACHE_TTL:
-        return cached["tables"]
+        return cached["tables"], cached["keys"]
 
     response = requests.get(
         PUBLIC_EXPORT_URL.format(sheet_id=sheet_id),
@@ -319,6 +332,7 @@ def _public_tables():
 
     workbook = load_workbook(io.BytesIO(response.content), read_only=True, data_only=True)
     try:
+        table_keys = {}
         tables = {}
         for name in workbook.sheetnames:
             worksheet = workbook[name]
@@ -328,30 +342,46 @@ def _public_tables():
             ]
             while rows and not any(rows[-1]):
                 rows.pop()
+            table_keys[name.strip().lower()] = name.strip()
             tables[name.strip().lower()] = rows
     finally:
         workbook.close()
 
-    _PUBLIC_CACHE[sheet_id] = {"at": now, "tables": tables}
-    return tables
+    _PUBLIC_CACHE[sheet_id] = {"at": now, "tables": tables, "keys": table_keys}
+    return tables, table_keys
+
+
+def _all_public_tabs():
+    """Gabungan nama tab (huruf kecil) dari seluruh spreadsheet publik."""
+    names = set()
+    for sheet_id in _public_ids():
+        _tables, keys = _public_tables_for(sheet_id)
+        names.update(keys.keys())
+    return names
 
 
 def _resolve_public_tab(wanted):
     """Mencari tab yang cocok untuk sebuah range, termasuk lewat alias.
 
     Tanpa alias, sheet yang menamai tabnya "Standings" akan selalu terbaca
-    kosong padahal isinya justru klasemen.
+    kosong padahal isinya justru klasemen. Pencarian dilintasi seluruh ID
+    public; yang dikembalikan adalah ID pertama yang punya tabnya.
+    Label sumber memakai key (huruf kecil) untuk pencocokan langsung, atau
+    niagara nama alias untuk pencocokan leluasa — jadi `google_public:tco`
+    bila tabnya "TCO", atau `google_public:Jadwal` bila pakai alias.
     """
-    tables = _public_tables()
     key = wanted.strip().lower()
-    if key in tables:
-        return tables[key], wanted.strip()
+    for sheet_id in _public_ids():
+        tables, table_keys = _public_tables_for(sheet_id)
+        if key in table_keys:
+            return tables[key], key, sheet_id
 
-    for alias in TAB_ALIASES.get(key, ()):
-        candidate = alias.strip().lower()
-        if candidate in tables:
-            return tables[candidate], alias.strip()
-    return [], None
+        for alias in TAB_ALIASES.get(key, ()):
+            candidate = alias.strip()
+            lower = candidate.lower()
+            if lower in table_keys:
+                return tables[lower], candidate, sheet_id
+    return [], None, None
 
 
 def _read_range(rng):
@@ -384,8 +414,8 @@ def _read_range(rng):
 
     sheet_name = rng.split("!")[0]
 
-    if _public_id():
-        rows, tab = _resolve_public_tab(sheet_name)
+    if _public_ids():
+        rows, tab, _sheet_id = _resolve_public_tab(sheet_name)
         if rows:
             return rows, f"google_public:{tab}"
 
@@ -680,3 +710,38 @@ def read_settings(rng=RANGE_ARENA_CONFIG):
         if key and value:
             settings[key] = value
     return settings, source
+
+
+def get_schedule(league=None):
+    """Jadwal match dari sheet Schedules tab, sebagai cadangan web-tco.
+
+    Mengembalikan (rows, sumber). `rows` adalah list dict dengan field
+    tanggal, waktu, round, liga, nama, lawan — sama seperti webtco.upcoming.
+    """
+    try:
+        records, source = _records(RANGE_SCHEDULES, required=("nama", "tanggal"))
+    except ValueError as e:
+        return [], str(e)
+
+    if not records:
+        return [], "Sheet Schedules tidak ada atau kosong"
+
+    rows = []
+    for record in records:
+        liga_val = record.get("liga", "")
+        if league:
+            wanted = str(league).strip().upper()
+            if liga_val.strip().upper() != wanted:
+                continue
+        rows.append({
+            "tanggal": record.get("tanggal", ""),
+            "waktu": record.get("waktu", ""),
+            "round": _to_int(record.get("round"), 0),
+            "liga": liga_val,
+            "nama": record.get("nama", ""),
+            "lawan": record.get("lawan", ""),
+            "source": "sheet",
+        })
+
+    rows.sort(key=lambda r: (r["tanggal"] or "9999", r["waktu"] or "99:99", r["round"] or 99))
+    return rows, source
