@@ -37,6 +37,11 @@ assets/branding/*/*.png
 # Konfigurasi akun lokal (accounts.example.json yang dipakai sebagai template)
 accounts.json
 
+# Proyek Remotion: dependensi dan output render lokal (props.json dibuat CI)
+/remotion/node_modules/
+/remotion/out/
+/remotion/props.json
+
 # Data klub catur. club-data-template.xlsx boleh di-commit sebagai template;
 # club-data*.xlsx berisi data asli jadi tidak boleh masuk repository.
 club-data.xlsx

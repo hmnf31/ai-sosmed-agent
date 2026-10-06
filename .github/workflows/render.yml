@@ -1,0 +1,91 @@
+name: Render Video (Remotion)
+
+on:
+  workflow_dispatch:
+    inputs:
+      job_id:
+        description: 'Job ID (mis. job_20261006_mlbb_001)'
+        required: true
+        type: string
+      account:
+        description: 'Akun konten'
+        required: true
+        type: choice
+        options:
+          - mlbb
+          - chess
+          - wedding
+          - fashion
+        default: mlbb
+      mode:
+        description: 'preview (setengah resolusi) atau final (resolusi penuh)'
+        required: true
+        type: choice
+        options:
+          - preview
+          - final
+        default: preview
+      timeline:
+        description: 'Path timeline.json di repo (kosongkan = timeline dummy)'
+        required: false
+        type: string
+        default: ''
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: remotion/package-lock.json
+
+      - name: Install dependencies
+        working-directory: remotion
+        run: npm ci
+
+      - name: Siapkan props (timeline + meta)
+        env:
+          TIMELINE_INPUT: ${{ inputs.timeline }}
+          JOB_ID: ${{ inputs.job_id }}
+          ACCOUNT: ${{ inputs.account }}
+        run: |
+          set -euo pipefail
+          TL="$TIMELINE_INPUT"
+          if [ -z "$TL" ]; then TL="remotion/src/timeline/vertical-dummy.json"; fi
+          if [ ! -f "$TL" ]; then echo "Timeline tidak ditemukan: $TL" >&2; exit 1; fi
+          jq -n --slurpfile tl "$TL" --arg job "$JOB_ID" --arg acct "$ACCOUNT" \
+            '{timeline: $tl[0], meta: {job_id: $job, account: $acct}}' > remotion/props.json
+          echo "Komposisi: $(jq -r '.timeline.composition_id' remotion/props.json)"
+
+      - name: Render video
+        working-directory: remotion
+        env:
+          MODE: ${{ inputs.mode }}
+          JOB_ID: ${{ inputs.job_id }}
+        run: |
+          set -euo pipefail
+          COMP=$(jq -r '.timeline.composition_id' props.json)
+          ARGS=(--props props.json)
+          if [ "$MODE" = "preview" ]; then ARGS+=(--scale 0.5); fi
+          npx remotion render "$COMP" "out/${JOB_ID}-${MODE}.mp4" "${ARGS[@]}"
+
+      - name: Info hasil
+        run: ls -lh remotion/out/
+
+      - name: Unggah artefak
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.job_id }}-${{ inputs.mode }}
+          path: remotion/out/*.mp4
+          if-no-files-found: error
+          retention-days: 7

@@ -3,6 +3,7 @@ import shutil
 import subprocess
 from datetime import datetime, timedelta, timezone
 
+from utils import render_engine
 from utils.image_maker import VIDEO_WIDTH, VIDEO_HEIGHT, render_content_video_frames, render_video_frames
 from utils.media import layout_engine
 
@@ -81,6 +82,7 @@ def render_content_video(content, output_path=None, footer="AI Sosmed Agent",
     Frame dibuat oleh `utils.media.template_engine` supaya video mendapat warna,
     template, dan watermark yang sama persis dengan kartu.
     """
+    render_engine.video_engine()  # menolak VIDEO_ENGINE=remotion (lihat utils/render_engine.py)
     from branding import loader
     from utils.media import template_engine
 
@@ -107,6 +109,7 @@ def render_content_video(content, output_path=None, footer="AI Sosmed Agent",
 
 def render_trend_video(trends, output_path=None, footer="AI Sosmed Agent"):
     """Menggabungkan frame vertikal menjadi video mp4 (h264 + audio) untuk TikTok/Reels."""
+    render_engine.video_engine()  # menolak VIDEO_ENGINE=remotion (lihat utils/render_engine.py)
     frames = render_video_frames(trends, footer=footer, output_dir=_out_dir())
 
     if output_path is None:

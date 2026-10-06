@@ -1,0 +1,54 @@
+{
+  "schema_version": "1.0",
+  "job_id": "job_20261006_mlbb_001",
+  "composition_id": "MLBBVertical",
+  "width": 1080,
+  "height": 1920,
+  "fps": 30,
+  "duration_frames": 450,
+  "branding": {
+    "handle": "@mlbb.indo",
+    "background": "#0A0E17",
+    "primary": "#00B8D4",
+    "secondary": "#FF2D6F",
+    "accent": "#00E5FF",
+    "text": "#F2F7FF",
+    "muted": "#9AA7BD"
+  },
+  "tracks": [
+    {
+      "track_id": "visuals",
+      "type": "visual",
+      "items": [
+        {"item_id": "visual_01", "scene_id": "scene_01", "asset_id": "placeholder-1.png", "start_frame": 0, "duration_frames": 150, "fit": "cover", "motion": "slow_zoom"},
+        {"item_id": "visual_02", "scene_id": "scene_02", "asset_id": "placeholder-2.png", "start_frame": 150, "duration_frames": 150, "fit": "cover", "motion": "slow_zoom"},
+        {"item_id": "visual_03", "scene_id": "scene_03", "asset_id": "placeholder-3.png", "start_frame": 300, "duration_frames": 150, "fit": "cover", "motion": "none"}
+      ]
+    },
+    {
+      "track_id": "text",
+      "type": "text",
+      "items": [
+        {"item_id": "hook", "text": "Tips Jungler untuk Pemula", "style": "hook", "start_frame": 0, "duration_frames": 90},
+        {"item_id": "caption_01", "text": "1. Farming jungle dulu, jangan ikut war terlalu dini", "style": "caption", "start_frame": 90, "duration_frames": 90},
+        {"item_id": "caption_02", "text": "2. Rotasi setelah buff aman, bawa hero cepat", "style": "caption", "start_frame": 180, "duration_frames": 90},
+        {"item_id": "caption_03", "text": "3. Ambil objektif bersama tim, jangan sendirian", "style": "caption", "start_frame": 270, "duration_frames": 90},
+        {"item_id": "cta", "text": "Follow @mlbb.indo!", "style": "title", "start_frame": 360, "duration_frames": 90}
+      ]
+    },
+    {
+      "track_id": "voice",
+      "type": "audio",
+      "items": [
+        {"item_id": "vo_01", "audio_id": "placeholder-audio.wav", "start_frame": 0, "duration_frames": 450, "volume": 1.0}
+      ]
+    },
+    {
+      "track_id": "branding",
+      "type": "overlay",
+      "items": [
+        {"item_id": "watermark", "template_id": "mlbb_vertical_hook", "start_frame": 0, "duration_frames": 450}
+      ]
+    }
+  ]
+}

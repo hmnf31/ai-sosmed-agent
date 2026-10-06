@@ -1,0 +1,23 @@
+{
+  "name": "ai-sosmed-remotion",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Komposisi Remotion untuk render video AI Content Automation",
+  "scripts": {
+    "compositions": "remotion compositions",
+    "studio": "remotion studio",
+    "render:preview": "remotion render MLBBVertical out/preview.mp4 --scale 0.5",
+    "render:final": "remotion render MLBBVertical out/final.mp4"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.533",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "remotion": "4.0.533"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "typescript": "^5.7.0"
+  }
+}
