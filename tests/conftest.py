@@ -32,6 +32,21 @@ def db_path(tmp_path, monkeypatch):
 
 
 @pytest.fixture
+def jobs_db_path(tmp_path, monkeypatch):
+    """Database job sementara yang otomatis terhapus setelah test."""
+    from utils import job_store
+
+    target = str(tmp_path / "jobs.db")
+    monkeypatch.setenv("JOBS_DB_PATH", target)
+    job_store.init_db(target)
+    yield target
+    for suffix in ("", "-wal", "-shm"):
+        candidate = target + suffix
+        if os.path.exists(candidate):
+            os.remove(candidate)
+
+
+@pytest.fixture
 def fake_notifier(monkeypatch):
     """Menangkap semua pengiriman Telegram tanpa menyentuh jaringan."""
     from utils import telegram_bot, notifier

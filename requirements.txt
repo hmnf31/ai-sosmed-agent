@@ -24,3 +24,7 @@ openpyxl==3.1.5
 # Opsional: hanya dipakai bila SHEET_CREDENTIALS_JSON diisi. Tanpa library ini,
 # modul utils/chess/spreadsheet.py tetap jalan lewat SHEET_CSV_PATH.
 cryptography==50.0.2
+
+# Validasi content_plan.json terhadap data/schemas/content_plan_schema.json
+# (Phase 4 Content Planner).
+jsonschema==4.23.0
