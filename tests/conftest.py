@@ -89,12 +89,16 @@ def fake_pipeline(monkeypatch):
 
     calls = {"research": [], "ai": [], "render": []}
 
-    def _topics(account, request):
-        calls["research"].append((account["id"], request))
+    def _research(request, account):
+        calls["research"].append(("pack", request, account["id"]))
+        return {"items": [], "build_at": None, "used_fallback": True}
+
+    def _topics(account, request, pack=None):
+        calls["research"].append(("topics", account["id"], request))
         return [f"{request} (tren)"]
 
     def _content(request, topics, account, category=None, avoid_topics=None,
-                 angle_hint="", brand=None):
+                 angle_hint="", brand=None, sources=None):
         calls["ai"].append({
             "request": request,
             "topics": tuple(topics),
@@ -103,6 +107,7 @@ def fake_pipeline(monkeypatch):
             "avoid_topics": tuple(avoid_topics or ()),
             "angle_hint": angle_hint,
             "brand_account": (brand or {}).get("account"),
+            "sources": tuple(sources or ()),
         })
         return {
             "title": f"Judul {request}",
@@ -125,6 +130,7 @@ def fake_pipeline(monkeypatch):
                                 (brand or {}).get("account")))
         return "output/test-video.mp4"
 
+    monkeypatch.setattr(telegram_bot, "_build_research", _research)
     monkeypatch.setattr(telegram_bot, "_collect_topics", _topics)
     monkeypatch.setattr(telegram_bot, "generate_content", _content)
     monkeypatch.setattr(telegram_bot, "render_content_image", _image)

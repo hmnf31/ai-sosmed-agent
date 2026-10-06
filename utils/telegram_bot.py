@@ -22,6 +22,7 @@ from utils import accounts as accounts_mod
 from utils import engines
 from utils import history as history_mod
 from utils import keyboards
+from utils import research as research_mod
 from utils import router
 from utils.chess import arena as chess_arena
 from utils.chess import liga as chess_liga
@@ -36,7 +37,6 @@ from utils.notifier import (
     send_chat_message,
     send_telegram_media,
 )
-from utils.scraper import get_topic_trends
 from utils.video_maker import render_content_video
 
 LOG_PATH = os.getenv("CONTENT_LOG_PATH") or "output/content-bot.log"
@@ -154,14 +154,21 @@ def _requested_format(intent):
     return os.getenv("DEFAULT_CONTENT_FORMAT", "video").strip().lower()
 
 
-def _collect_topics(account, request):
-    query = f"{account.get('source_query') or account['niche']} {request}".strip()
-    topics = get_topic_trends(
-        query,
-        keywords=account.get("keywords", []),
-        seed_topics=account.get("seed_topics", []),
-        max_results=MAX_TOPICS,
-    )
+def _build_research(request, account):
+    """Paket riset sumber untuk satu permintaan konten (multi-sumber + fallback)."""
+    return research_mod.build_research(request, account=account, top_n=MAX_TOPICS)
+
+
+def _collect_topics(account, request, pack=None):
+    """Topik untuk prompt AI: judul dari paket riset, fallback ke request.
+
+    Bila `pack` tidak diberikan (dipanggil berdiri sendiri), riset dijalankan
+    di sini. Kegagalan riset di urut langkah sebelumnya, jadi di sini `pack`
+    bisa kosong dan topik tetap dihasilkan.
+    """
+    if pack is None:
+        pack = _build_research(request, account)
+    topics = research_mod.topics_from_pack(pack, max_results=MAX_TOPICS)
     if not topics:
         topics = [request]
     return topics
@@ -195,7 +202,16 @@ def build_package(intent, account, chat_id="", request_id=None):
             f"URL produk/jcob yang diberikan: {intent['url']}"
         ]
 
-    topics = _collect_topics(account, request)
+    # Riset sumber (multi-sumber + fallback). Kegagalan riset diteruskan ke
+    # error handling supaya request dicatat sebagai gagal, seperti perilaku
+    # lama ketika scraping YouTube gagal.
+    research_pack = _build_research(request, account)
+    research_block = research_mod.to_content_plan_research(
+        research_pack,
+        required=bool(account.get("fact_check_rules")),
+    )
+
+    topics = _collect_topics(account, request, pack=research_pack)
     info(f"[{_stamp(chat_id)}] topik {label}: {'; '.join(topics)}")
 
     # Brand Profile dibaca sekali lalu dipakai bersama: prompt AI, renderer, dan
@@ -211,8 +227,15 @@ def build_package(intent, account, chat_id="", request_id=None):
         avoid_topics=brief.get("avoid_topics"),
         angle_hint=brief.get("angle_hint", ""),
         brand=brand,
+        sources=research_pack.get("items"),
     )
     content["instructions"] = engine.extra_instructions(brief)
+    content["research"] = research_block
+    if not content.get("source_url"):
+        for item in research_pack.get("items", []):
+            if item.get("url"):
+                content["source_url"] = item["url"]
+                break
     fmt = _requested_format(intent)
 
     record = history_mod.record_content(
@@ -257,6 +280,8 @@ def build_package(intent, account, chat_id="", request_id=None):
         "brand": brand,
         "template": template,
         "branding_problems": qa,
+        "research": research_block,
+        "research_summary": research_mod.summarize(research_pack),
     }
     info(
         f"[{_stamp(chat_id)}] {label} selesai: {content_id} {fmt} {os.path.basename(media)} "
@@ -305,6 +330,11 @@ def _reply(chat_id, package):
     # URL dikirim polos supaya bisa langsung disalin dan diklik.
     if content.get("source_url"):
         lines.append(f"Sumber: {content['source_url']}")
+    research = package.get("research") or {}
+    if research.get("sources"):
+        lines.append(
+            f"Riset: {len(research['sources'])} sumber — status {research['fact_check_status']}"
+        )
     if problems:
         lines.append("Catatan branding: " + "; ".join(problems))
     lines.extend(["", "Caption (salin manual):", content["caption"]])

@@ -476,6 +476,16 @@ def summarize(pack):
     return "\n".join(lines)
 
 
+def topics_from_pack(pack, *, max_results=3):
+    """Judul dari item riset sebagai bahan topik prompt AI/Telegram."""
+    titles = [
+        item.get("title")
+        for item in pack.get("items", [])
+        if item.get("title")
+    ]
+    return titles[:max_results]
+
+
 if __name__ == "__main__":
     import argparse
     import sys

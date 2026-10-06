@@ -248,3 +248,17 @@ def test_summarize_includes_urls_and_dates():
 
 def test_summarize_empty():
     assert research.summarize({"items": [], "used_fallback": True}) == "Riset: 0 sumber"
+
+
+def test_topics_from_pack_uses_titles_and_caps():
+    pack = {"items": [
+        {"title": "Topik A"},
+        {"title": "Topik B"},
+        {"title": "Topik C"},
+        {"title": "Topik D"},
+    ]}
+    assert research.topics_from_pack(pack, max_results=3) == ["Topik A", "Topik B", "Topik C"]
+    assert research.topics_from_pack({"items": []}, max_results=3) == []
+    # Item tanpa judul diabaikan, bukan dikonversi jadi None.
+    items = [{"title": "Ada"}, {"title": None}]
+    assert research.topics_from_pack({"items": items}, max_results=3) == ["Ada"]

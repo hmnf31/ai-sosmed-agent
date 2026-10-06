@@ -43,6 +43,9 @@ PERMINTAAN PEMAKAI
 KONTEKS TOPIK YANG HARUS DIPAKAI
 {topics}
 
+SUMBER WAJIB (fakta, angka, tanggal, dan nama HANYA boleh diambil dari sini; jangan mengarang di luar ini)
+{sources}
+
 KATEGORI KONTEN: {category}
 
 ATURAN WAJIB (tidak boleh dilanggar)
@@ -67,6 +70,7 @@ Ketentuan tambahan:
 - "hashtags" hanya dari daftar yang boleh dipakai atau yang wajar untuk niche ini.
 - Jangan mengarang angka, harga, tanggal, nama brand, atau hasil yang tidak ada di konteks.
 - "source_url" ditulis sebagai URL polos, tanpa format markdown seperti [teks](url).
+- Bila SUMBER WAJIB terisi, "source_url" WAJIB memakai salah satu URL dari daftar itu.
 - Bila data yang dibutuhkan tidak ada, tulis "data tidak tersedia" di dalam caption.
 - Balas hanya JSON.
 """
@@ -169,13 +173,38 @@ def _resolve_brand(account, brand=None):
         return {}
 
 
+def _sources_block(sources, limit=5):
+    """Format daftar sumber riset menjadi blok prompt yang mudah dibaca model.
+
+    Hanya item ber-URL atau berjudul yang dimasukkan; setiap baris memuat
+    judul, tanggal terbit (bila ada), dan URL polos supaya model bisa memakai
+    URL itu langsung sebagai `source_url`.
+    """
+    lines = []
+    for source in (sources or [])[:limit]:
+        title = source.get("title")
+        url = source.get("url")
+        if not title and not url:
+            continue
+        parts = [title or url]
+        if source.get("published_date"):
+            parts.append(f"[{source['published_date']}]")
+        line = " - ".join(parts)
+        if url:
+            line = f"{line} ({url})"
+        lines.append(f"- {line}")
+    return "\n".join(lines) or "(tidak ada sumber eksternal)"
+
+
 def build_prompt(request, topics, account, category=None, max_points=MAX_FRAMES,
-                 avoid_topics=None, angle_hint="", brand=None):
+                 avoid_topics=None, angle_hint="", brand=None, sources=None):
     """Menyusun prompt per akun.
 
     fact_check_rules ikut dimasukkan sebagai aturan wajib supaya MLBB dan catur
     tidak menghasilkan angka atau hasil pertandingan karangan. Gaya tulis dari
     Brand Profile ikut dimasukkan sebagai arahan, bukan sebagai data.
+    Sumber riset (bila ada) dimasukkan sebagai konteks wajib: fakta hanya boleh
+    diambil dari daftar tersebut.
     """
     account = account or {}
     rules = account.get("fact_check_rules") or []
@@ -196,6 +225,7 @@ def build_prompt(request, topics, account, category=None, max_points=MAX_FRAMES,
         voice=voice_block(account, brand or _resolve_brand(account, brand)),
         request=request,
         topics="\n".join(f"- {t}" for t in topics) or "- (belum ada topik, gunakan pengetahuan umum)",
+        sources=_sources_block(sources),
         category=category or "umum",
         avoid=avoid_block or "\n(none)\n",
         fact_rules="\n".join(f"- {r}" for r in combined),
@@ -289,8 +319,12 @@ def normalize_payload(raw, account):
 
 
 def generate_content(request, topics, account, category=None, avoid_topics=None,
-                      angle_hint="", brand=None):
-    """Menghasilkan caption + teks visual terstruktur untuk satu akun."""
+                      angle_hint="", brand=None, sources=None):
+    """Menghasilkan caption + teks visual terstruktur untuk satu akun.
+
+    `sources` (opsional) adalah daftar item riset; fakta model dibatasi pada
+    daftar ini lewat blok SUMBER WAJIB di prompt.
+    """
     api_key = os.getenv("OPENROUTER_API_KEY")
     if not api_key:
         raise ValueError("OPENROUTER_API_KEY tidak ditemukan!")
@@ -298,6 +332,7 @@ def generate_content(request, topics, account, category=None, avoid_topics=None,
     prompt = build_prompt(
         request, topics, account, category=category,
         avoid_topics=avoid_topics, angle_hint=angle_hint, brand=brand,
+        sources=sources,
     )
     headers = {
         "Authorization": f"Bearer {api_key}",

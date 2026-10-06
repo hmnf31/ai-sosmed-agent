@@ -220,13 +220,54 @@ def test_request_logged_with_duration(fake_notifier, fake_pipeline, db_path):
     assert rows[0]["duration_ms"] is not None
 
 
+def test_research_sources_wired_into_content(fake_notifier, fake_pipeline, db_path, monkeypatch):
+    """Sumber riset mengalir ke prompt AI, ditanam ke content, dan tampil di balasan."""
+    from utils import telegram_bot
+
+    pack = {
+        "build_at": "2026-10-06T09:00:00+07:00",
+        "items": [{
+            "source_id": "src_abc",
+            "url": "https://contoh.id/mlbb-patch",
+            "title": "Patch Note Resmi",
+            "publisher": "contoh.id",
+            "published_date": "2026-10-05",
+            "retrieved_at": "2026-10-06T09:00:00+07:00",
+            "claim": "Patch terbaru MLBB",
+            "status": "verified",
+        }],
+    }
+    monkeypatch.setattr(telegram_bot, "_build_research", lambda request, account: pack)
+    telegram_bot.handle_message("123", "buatkan konten mlbb patch terbaru")
+
+    assert fake_pipeline["ai"][-1]["sources"][0]["url"] == "https://contoh.id/mlbb-patch"
+    last = fake_notifier["sent"][-1]["text"]
+    assert "Riset: 1 sumber" in last
+    assert "verified" in last
+    # source_url hasil AI kosong -> diisi dari sumber riset, lalu dikirim.
+    assert "Sumber: https://contoh.id/mlbb-patch" in last
+
+
+def test_research_empty_still_produces_content(fake_notifier, fake_pipeline, db_path, monkeypatch):
+    """Paket riset kosong (mis. seed gagal) tidak menghentikan produksi konten."""
+    from utils import telegram_bot
+
+    monkeypatch.setattr(
+        telegram_bot, "_build_research",
+        lambda request, account: {"items": [], "build_at": None, "used_fallback": True},
+    )
+    telegram_bot.handle_message("123", "buatkan konten mlbb counter hayabusa")
+    assert fake_pipeline["ai"], "AI tetap harus dipanggil walau riset kosong"
+    assert fake_notifier["media"]
+
+
 def test_failure_is_logged_as_error(fake_notifier, db_path, monkeypatch):
     from utils import telegram_bot
 
     def _boom(*args, **kwargs):
         raise RuntimeError("riset gagal")
 
-    monkeypatch.setattr(telegram_bot, "_collect_topics", _boom)
+    monkeypatch.setattr(telegram_bot, "_build_research", _boom)
     telegram_bot.handle_message("123", "buatkan konten mlbb patch terbaru")
     assert any("riset gagal" in m["text"] for m in fake_notifier["sent"])
     assert history.requests_recent(path=db_path)[0]["status"] == "error"
