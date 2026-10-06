@@ -1,0 +1,84 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Asset Manifest Schema",
+  "description": "Schema for asset manifests produced by the Image Asset Generator (Phase 6). API keys are never stored in the manifest.",
+  "type": "object",
+  "required": ["schema_version", "job_id", "assets"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "description": "Version of the asset manifest schema",
+      "const": "1.0"
+    },
+    "job_id": {
+      "type": "string",
+      "description": "Job id of the source content plan",
+      "pattern": "^job_[0-9]{4}$"
+    },
+    "assets": {
+      "type": "array",
+      "description": "Generated or prepared assets, one per image scene",
+      "items": {
+        "type": "object",
+        "required": ["asset_id", "scene_id", "type", "path", "purpose", "source_type", "status"],
+        "properties": {
+          "asset_id": {
+            "type": "string",
+            "description": "Stable id, e.g. asset_scene_01"
+          },
+          "scene_id": {
+            "type": "string",
+            "description": "Scene this asset belongs to",
+            "pattern": "^scene_[0-9]{2}$"
+          },
+          "type": {
+            "type": "string",
+            "const": "image"
+          },
+          "path": {
+            "type": ["string", "null"],
+            "description": "Path to the asset file; null when generation failed"
+          },
+          "purpose": {
+            "type": "string",
+            "description": "Scene purpose (hook, intro, body, outro, callout, ...)"
+          },
+          "source_type": {
+            "type": "string",
+            "enum": ["ai_generated", "upload", "logo", "programmatic", "placeholder", "footage", "official_material"]
+          },
+          "provider": {
+            "type": "string",
+            "description": "Provider/model used; only present on generated assets"
+          },
+          "prompt_version": {
+            "type": "string",
+            "description": "Version of the prompt used to generate this asset"
+          },
+          "width": {
+            "type": ["integer", "null"],
+            "minimum": 1
+          },
+          "height": {
+            "type": ["integer", "null"],
+            "minimum": 1
+          },
+          "status": {
+            "type": "string",
+            "enum": ["ready", "fallback", "failed"]
+          },
+          "usage_rights": {
+            "type": "string",
+            "description": "Rights state: review_required for AI/human review, internal for placeholders",
+            "enum": ["own", "licensed", "review_required", "internal"]
+          },
+          "error": {
+            "type": "string",
+            "description": "Safe error detail when status is failed"
+          }
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}
