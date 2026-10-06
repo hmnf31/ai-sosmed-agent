@@ -683,8 +683,9 @@ Opsional:
 | `CONTENT_LOG_PATH` | `output/content-bot.log` | Lokasi file log |
 | `TELEGRAM_ALLOWED_CHATS` | kosong | Chat tambahan, pisahkan dengan koma |
 | `SHEET_CREDENTIALS_JSON` | kosong | JSON service account Google Sheets |
+| `SHEET_PUBLIC_ID` | kosong | ID atau URL sheet publik (tanpa kredensian) |
+| `SHEET_XLSX_PATH` | kosong | File .xlsx lokal (mis. club-data.xlsx, tidak di-commit) |
 | `SHEET_CSV_PATH` | kosong | CSV lokal, dipakai sebelum XLSX |
-| `SHEET_XLSX_PATH` | kosong | File .xlsx lokal |
 | `BRANDING_DIR` | `branding` | Folder Brand Profile per akun |
 | `STYLES_DIR` | `styles` | Folder style preset visual |
 | `TEMPLATE_REGISTRY_PATH` | `templates/registry.json` | Katalog template |
@@ -716,9 +717,11 @@ form, dan kontak.
 .venv\Scripts\python.exe -m playwright install chromium
 
 # sekali saja, kalau mau memakai data klub catur
+#   - template (untuk referensi):
 .venv\Scripts\python.exe scripts\make_sheet_template.py
-# isi club-data-template.xlsx, salin jadi club-data.xlsx, lalu set
-# SHEET_XLSX_PATH=club-data.xlsx di .env
+#   - data aktif (file lokal, tidak di-commit): isi jadwal TCO, copy club-data-template.xlsx jadi club-data.xlsx, atau generasi otomatis:
+.venv\Scripts\python.exe scripts\make_tco_data.py club-data.xlsx
+# lalu set SHEET_XLSX_PATH=club-data.xlsx (atau SHEET_PUBLIC_ID) di .env
 .venv\Scripts\python.exe scripts\check_sheet_data.py
 
 # sekali saja, setiap kali brand.json berubah

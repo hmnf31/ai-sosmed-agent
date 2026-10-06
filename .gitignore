@@ -24,6 +24,9 @@ Thumbs.db
 *.log
 output/
 
+# Artifact proses (mis. pembungkaman terminal yang bocor ke direktori kerja)
+LOGTRANSCRIPT
+
 # Aset branding hasil build. Logo dan watermark digambar ulang dari
 # branding/<akun>/brand.json, jadi cukup config yang di-commit.
 assets/branding/*/*.png
